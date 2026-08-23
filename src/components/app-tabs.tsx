@@ -1,4 +1,5 @@
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { Icon, Label, NativeTabs, VectorIcon } from 'expo-router/unstable-native-tabs';
 import { Platform, useColorScheme } from 'react-native';
 
 import { Colors } from '@/constants/theme';
@@ -6,7 +7,7 @@ import { useLanguage } from '@/context/language-context';
 
 export default function AppTabs() {
   const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
   const { text } = useLanguage();
 
   return (
@@ -22,34 +23,34 @@ export default function AppTabs() {
         selected: { color: Colors.light.primary, fontSize: 11, fontWeight: '700' },
       }}>
       <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>{text('库存', 'Inventory')}</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
+        <Label>{text('库存', 'Inventory')}</Label>
+        <Icon
           sf={{ default: 'refrigerator', selected: 'refrigerator.fill' }}
-          md={{ default: 'kitchen', selected: 'kitchen' }}
+          androidSrc={<VectorIcon family={MaterialCommunityIcons} name="fridge-outline" />}
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="recipes">
-        <NativeTabs.Trigger.Label>{text('菜谱', 'Recipes')}</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
+        <Label>{text('菜谱', 'Recipes')}</Label>
+        <Icon
           sf={{ default: 'book.pages', selected: 'book.pages.fill' }}
-          md={{ default: 'menu_book', selected: 'menu_book' }}
+          androidSrc={<VectorIcon family={MaterialCommunityIcons} name="book-open-outline" />}
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="recommend">
-        <NativeTabs.Trigger.Label>{text('健康', 'Health')}</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
+        <Label>{text('健康', 'Health')}</Label>
+        <Icon
           sf={{ default: 'heart.text.square', selected: 'heart.text.square.fill' }}
-          md={{ default: 'monitor_heart', selected: 'monitor_heart' }}
+          androidSrc={<VectorIcon family={MaterialCommunityIcons} name="heart-pulse" />}
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="profile">
-        <NativeTabs.Trigger.Label>{text('我的', 'Profile')}</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
+        <Label>{text('我的', 'Profile')}</Label>
+        <Icon
           sf={{ default: 'person.crop.circle', selected: 'person.crop.circle.fill' }}
-          md={{ default: 'person', selected: 'person' }}
+          androidSrc={<VectorIcon family={MaterialCommunityIcons} name="account-outline" />}
         />
       </NativeTabs.Trigger>
     </NativeTabs>

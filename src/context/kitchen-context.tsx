@@ -62,6 +62,7 @@ type KitchenContextValue = {
   addStorageLocation: (location: StorageLocation) => void;
   addRecipe: (recipe: Omit<Recipe, 'id'>) => Recipe;
   deleteRecipe: (id: string) => void;
+  updateRecipeCategories: (updates: { id: string; category: string }[]) => void;
   cookRecipe: (
     recipe: Recipe,
     servingMultiplier: number,
@@ -177,7 +178,15 @@ export function KitchenProvider({ children }: PropsWithChildren) {
   const [cookingHistory, setCookingHistory, cookingHistoryHydrated] = usePersistentState<
     CookingHistoryRecord[]
   >('cooking-history-v1', []);
-  const allRecipes = useMemo(() => [...customRecipes, ...builtInRecipes], [customRecipes]);
+  const [recipeCategoryOverrides, setRecipeCategoryOverrides, categoryOverridesHydrated] =
+    usePersistentState<Record<string, string>>('recipe-category-overrides-v1', {});
+  const allRecipes = useMemo(
+    () => [...customRecipes, ...builtInRecipes].map((recipe) => ({
+      ...recipe,
+      category: recipeCategoryOverrides[recipe.id] ?? recipe.category,
+    })),
+    [customRecipes, recipeCategoryOverrides]
+  );
 
   const value = useMemo<KitchenContextValue>(
     () => ({
@@ -187,7 +196,8 @@ export function KitchenProvider({ children }: PropsWithChildren) {
         locationsHydrated &&
         transactionsHydrated &&
         recipesHydrated &&
-        cookingHistoryHydrated,
+        cookingHistoryHydrated &&
+        categoryOverridesHydrated,
       transactions,
       inventory,
       libraries,
@@ -316,6 +326,16 @@ export function KitchenProvider({ children }: PropsWithChildren) {
       },
       deleteRecipe: (id) => {
         setCustomRecipes((current) => current.filter((recipe) => recipe.id !== id));
+        setRecipeCategoryOverrides((current) => {
+          const { [id]: _deleted, ...rest } = current;
+          return rest;
+        });
+      },
+      updateRecipeCategories: (updates) => {
+        setRecipeCategoryOverrides((current) => ({
+          ...current,
+          ...Object.fromEntries(updates.map((update) => [update.id, update.category])),
+        }));
       },
       cookRecipe: (recipe, servingMultiplier, metadata) => {
         const consumed = consumeRecipeInventory(inventory, recipe, servingMultiplier);
@@ -405,6 +425,7 @@ export function KitchenProvider({ children }: PropsWithChildren) {
       allRecipes,
       cookingHistory,
       cookingHistoryHydrated,
+      categoryOverridesHydrated,
       libraries,
       librariesHydrated,
       locationsHydrated,
@@ -413,6 +434,7 @@ export function KitchenProvider({ children }: PropsWithChildren) {
       setStorageLocations,
       setCustomRecipes,
       setCookingHistory,
+      setRecipeCategoryOverrides,
       setTransactions,
       transactions,
       transactionsHydrated,

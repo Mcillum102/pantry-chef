@@ -20,7 +20,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
+      "output": "server",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -54,6 +54,13 @@
         "expo-camera",
         {
           "cameraPermission": "允许鲜食记使用相机扫描商品条形码"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "允许鲜食记选择菜谱图片进行识图分析",
+          "cameraPermission": "允许鲜食记拍摄菜谱图片进行识图分析"
         }
       ]
     ],

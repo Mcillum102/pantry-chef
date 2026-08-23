@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import * as ImagePicker from 'expo-image-picker';
 import {
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -31,7 +33,10 @@ import { localDateKey, type MealType, useHealth } from '@/context/health-context
 import { useKitchen } from '@/context/kitchen-context';
 import { useLanguage } from '@/context/language-context';
 import { formatAmount, localizeContent } from '@/data/content-translations';
+import type { ImportedRecipe } from '@/data/ai-import';
 import { type CookingHistoryRecord, type Recipe } from '@/data/kitchen-data';
+import { analyzeRecipeImage, analyzeRecipeLink } from '@/services/ai-import';
+import { organizeRecipesWithAI } from '@/services/recipe-ai';
 import {
   amountFromBaseUnit,
   amountInBaseUnit,
@@ -40,15 +45,12 @@ import {
 
 const recipeLibraries = [
   { key: '全部', zh: '全部菜谱', en: 'All recipes', emoji: '📚', color: '#3D7F68' },
-  { key: '自定义', zh: '自定义', en: 'Custom', emoji: '✍️', color: '#5C7A68' },
   { key: '快手菜', zh: '快手菜', en: 'Quick', emoji: '⚡', color: '#D6874A' },
   { key: '一锅料理', zh: '一锅料理', en: 'One pot', emoji: '🍲', color: '#B95D7D' },
   { key: '下饭菜', zh: '下饭菜', en: 'With rice', emoji: '🍚', color: '#BA6A45' },
   { key: '面食', zh: '面食', en: 'Noodles', emoji: '🍜', color: '#735C9B' },
+  { key: '其他', zh: '其他', en: 'Other', emoji: '🥣', color: '#5C7A68' },
 ];
-const recipeCategories = recipeLibraries.filter((library) => library.key !== '全部');
-const commonRecipeTags = ['快手', '家常', '高蛋白', '早餐', '工作日晚餐', '一锅', '下饭', '暖胃', '烘焙', '甜点', '少糖'];
-const bakingRecipeTags = ['烘焙', '甜点', '早餐', '少糖'];
 const recipeEmojis = ['🍳', '🍲', '🥗', '🍝', '🍛', '🥘', '🥣', '🍚', '🥪', '🧁'];
 const ingredientUnits = ['克', '千克', '毫升', '升', '个', '颗', '根', '把', '片', '勺', '盒', '瓶'];
 
@@ -143,6 +145,7 @@ export default function RecipesScreen() {
     cookingHistory,
     addRecipe,
     deleteRecipe,
+    updateRecipeCategories,
     getRecipeMatch,
     cookRecipe,
     undoCookedRecipe,
@@ -153,7 +156,9 @@ export default function RecipesScreen() {
   const [majorLibrary, setMajorLibrary] = useState<MajorRecipeLibrary>('recipes');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('全部');
-  const [selectedTag, setSelectedTag] = useState('全部标签');
+  const [showAllRecipes, setShowAllRecipes] = useState(false);
+  const [isAiOrganizing, setIsAiOrganizing] = useState(false);
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [servings, setServings] = useState(2);
   const [mealType, setMealType] = useState<MealType>(currentMealType());
@@ -161,18 +166,23 @@ export default function RecipesScreen() {
   const [stepIndex, setStepIndex] = useState(0);
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
   const [isRecipeFormOpen, setIsRecipeFormOpen] = useState(false);
+  const [isRecipeAddMenuOpen, setIsRecipeAddMenuOpen] = useState(false);
+  const recipeAddMenuProgress = useSharedValue(0);
+  const [recipeImportMode, setRecipeImportMode] = useState<'image' | 'link' | null>(null);
+  const [recipeImportLink, setRecipeImportLink] = useState('');
+  const [recipeImportImageUri, setRecipeImportImageUri] = useState<string | null>(null);
+  const [recipeImportImageData, setRecipeImportImageData] = useState<string | null>(null);
+  const [recipeImportError, setRecipeImportError] = useState<string | null>(null);
+  const [isRecipeImportAnalyzing, setIsRecipeImportAnalyzing] = useState(false);
   const [recipeCelebration, setRecipeCelebration] = useState<Recipe | null>(null);
   const [recipeCompletion, setRecipeCompletion] = useState<Recipe | null>(null);
+  const pendingRecipeCompletionRef = useRef<Recipe | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [undoCandidate, setUndoCandidate] = useState<CookingHistoryRecord | null>(null);
   const [historyMessage, setHistoryMessage] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
   const [draftEmoji, setDraftEmoji] = useState('🍳');
   const [draftDescription, setDraftDescription] = useState('');
-  const [draftCategory, setDraftCategory] = useState('自定义');
-  const [draftMajorLibrary, setDraftMajorLibrary] = useState<MajorRecipeLibrary>('recipes');
-  const [draftTags, setDraftTags] = useState<string[]>([]);
-  const [draftCustomTag, setDraftCustomTag] = useState('');
   const [draftTime, setDraftTime] = useState('20');
   const [draftServings, setDraftServings] = useState('2');
   const [draftCarbs, setDraftCarbs] = useState('0');
@@ -195,6 +205,25 @@ export default function RecipesScreen() {
     transform: [
       { translateX: interpolate(detailReveal.value, [0, 1], [46, 0], Extrapolation.CLAMP) },
       { scale: interpolate(detailReveal.value, [0, 1], [0.985, 1], Extrapolation.CLAMP) },
+    ],
+  }));
+
+  const recipeAddButtonIconStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        rotate: `${interpolate(recipeAddMenuProgress.value, [0, 1], [0, 45], Extrapolation.CLAMP)}deg`,
+      },
+    ],
+  }));
+
+  const recipeAddMenuStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(recipeAddMenuProgress.value, [0, 0.2, 1], [0, 0.72, 1], Extrapolation.CLAMP),
+    transform: [
+      { translateY: interpolate(recipeAddMenuProgress.value, [0, 1], [-12, 0], Extrapolation.CLAMP) },
+      { scale: interpolate(recipeAddMenuProgress.value, [0, 1], [0.82, 1], Extrapolation.CLAMP) },
+      {
+        rotate: `${interpolate(recipeAddMenuProgress.value, [0, 1], [-7, 0], Extrapolation.CLAMP)}deg`,
+      },
     ],
   }));
 
@@ -243,7 +272,6 @@ export default function RecipesScreen() {
         const searchableText = [
           recipe.name,
           localizeContent(recipe.name, language),
-          ...(recipe.tags ?? []).flatMap((tag) => [tag, localizeContent(tag, language)]),
           ...recipe.ingredients.flatMap((ingredient) => [
             ingredient.name,
             localizeContent(ingredient.name, language),
@@ -253,19 +281,45 @@ export default function RecipesScreen() {
           .toLocaleLowerCase();
         return (
           searchableText.includes(normalizedSearch) &&
-          (majorLibrary === 'baking' || category === '全部' || recipe.category === category) &&
-          (selectedTag === '全部标签' || (recipe.tags ?? []).includes(selectedTag))
+          (majorLibrary === 'baking' || category === '全部' || recipe.category === category)
         );
       }),
-    [category, language, libraryRecipes, majorLibrary, search, selectedTag]
+    [category, language, libraryRecipes, majorLibrary, search]
   );
 
-  const availableRecipeTags = useMemo(
-    () => [
-      '全部标签',
-      ...Array.from(new Set(libraryRecipes.flatMap((recipe) => recipe.tags ?? []))),
-    ],
-    [libraryRecipes]
+  const recentlyCookedRecipes = useMemo(() => {
+    const byId = new Map(libraryRecipes.map((recipe) => [recipe.id, recipe]));
+    const seen = new Set<string>();
+    return cookingHistory.flatMap((record) => {
+      if (seen.has(record.recipeId)) return [];
+      const recipe = byId.get(record.recipeId);
+      if (!recipe) return [];
+      seen.add(record.recipeId);
+      return [recipe];
+    });
+  }, [cookingHistory, libraryRecipes]);
+
+  const showingRecent =
+    majorLibrary === 'recipes' && category === '全部' && !search.trim() && !showAllRecipes;
+  const displayedRecipes = showingRecent ? recentlyCookedRecipes : visibleRecipes;
+  const sectionTitle = majorLibrary === 'baking'
+    ? text('我的烘焙谱', 'My baking recipes')
+    : showingRecent
+      ? text('最近烧过', 'Recently cooked')
+      : category === '全部' && !search.trim()
+        ? text('全部菜谱', 'All recipes')
+        : text('筛选结果', 'Results');
+
+  const recipeOrganizationInput = useMemo(
+    () => recipes.map(({ id, name, description, ingredients, steps, timeMinutes }) => ({
+      id,
+      name,
+      description,
+      ingredients,
+      steps,
+      timeMinutes,
+    })),
+    [recipes]
   );
 
   const validDraftRecipe =
@@ -331,6 +385,7 @@ export default function RecipesScreen() {
     setCompletedTimerSteps([]);
     setIsPageTurning(false);
     pageTurn.set(1);
+    if (Platform.OS !== 'ios') requestAnimationFrame(handleRecipeDetailDismiss);
   }
 
   function closeRecipe() {
@@ -348,6 +403,13 @@ export default function RecipesScreen() {
         }
       )
     );
+  }
+
+  function handleRecipeDetailDismiss() {
+    const completedRecipe = pendingRecipeCompletionRef.current;
+    if (!completedRecipe) return;
+    pendingRecipeCompletionRef.current = null;
+    setRecipeCompletion(completedRecipe);
   }
 
   function finishPageTurn() {
@@ -426,26 +488,127 @@ export default function RecipesScreen() {
     const next = nextLibrary ?? (majorLibrary === 'recipes' ? 'baking' : 'recipes');
     setMajorLibrary(next);
     setCategory('全部');
-    setSelectedTag('全部标签');
+    setShowAllRecipes(next === 'baking');
   }
 
   function openRecipeForm() {
-    const nextDraftLibrary = majorLibrary;
-    setDraftMajorLibrary(nextDraftLibrary);
-    setDraftCategory(nextDraftLibrary === 'baking' ? '烘焙谱' : '自定义');
-    setDraftEmoji(nextDraftLibrary === 'baking' ? '🧁' : '🍳');
-    setDraftTags(nextDraftLibrary === 'baking' ? ['烘焙'] : []);
+    setDraftEmoji(majorLibrary === 'baking' ? '🧁' : '🍳');
     setIsRecipeFormOpen(true);
   }
 
-  function changeDraftMajorLibrary(nextLibrary: MajorRecipeLibrary) {
-    setDraftMajorLibrary(nextLibrary);
-    setDraftCategory(nextLibrary === 'baking' ? '烘焙谱' : '自定义');
-    if (nextLibrary === 'baking') {
-      setDraftEmoji((current) => current === '🍳' ? '🧁' : current);
-      setDraftTags((current) => current.includes('烘焙') ? current : ['烘焙', ...current].slice(0, 6));
-    } else {
-      setDraftTags((current) => current.filter((tag) => tag !== '烘焙'));
+  function openRecipeAddMenu() {
+    setIsRecipeAddMenuOpen(true);
+    recipeAddMenuProgress.set(0);
+    recipeAddMenuProgress.set(
+      withTiming(1, {
+        duration: 280,
+        easing: Easing.out(Easing.back(1.55)),
+      })
+    );
+  }
+
+  function closeRecipeAddMenu() {
+    recipeAddMenuProgress.set(
+      withTiming(0, {
+        duration: 150,
+        easing: Easing.in(Easing.quad),
+      })
+    );
+    setTimeout(() => setIsRecipeAddMenuOpen(false), 150);
+  }
+
+  function openBasicRecipeForm() {
+    recipeAddMenuProgress.set(0);
+    setIsRecipeAddMenuOpen(false);
+    openRecipeForm();
+  }
+
+  async function chooseRecipeImage() {
+    recipeAddMenuProgress.set(0);
+    setIsRecipeAddMenuOpen(false);
+    setRecipeImportError(null);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.65,
+      base64: true,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    if (!asset?.base64) {
+      setRecipeImportError(text('无法读取这张图片，请换一张重试。', 'Could not read this image. Try another one.'));
+      setRecipeImportMode('image');
+      return;
+    }
+    setRecipeImportImageUri(asset.uri);
+    setRecipeImportImageData(`data:${asset.mimeType ?? 'image/jpeg'};base64,${asset.base64}`);
+    setRecipeImportMode('image');
+  }
+
+  function openRecipeLinkImport() {
+    recipeAddMenuProgress.set(0);
+    setIsRecipeAddMenuOpen(false);
+    setRecipeImportLink('');
+    setRecipeImportError(null);
+    setRecipeImportMode('link');
+  }
+
+  function applyImportedRecipe(recipe: ImportedRecipe) {
+    setDraftName(recipe.name);
+    setDraftEmoji(recipe.emoji || (recipe.category === '烘焙谱' ? '🧁' : '🍳'));
+    setDraftDescription(recipe.description);
+    setDraftTime(String(Math.max(1, Math.round(recipe.timeMinutes))));
+    setDraftServings(String(Math.max(1, Math.round(recipe.servings))));
+    setDraftCarbs(String(Math.max(0, Math.round(recipe.carbsPerServing))));
+    setDraftDifficulty(recipe.difficulty);
+    setDraftIngredients(recipe.ingredients.map((ingredient, index) => ({
+      id: `imported-ingredient-${Date.now()}-${index}`,
+      name: ingredient.name,
+      amount: String(ingredient.amount),
+      unit: ingredient.unit,
+    })));
+    setDraftSteps(recipe.steps.map((step, index) => ({
+      id: `imported-step-${Date.now()}-${index}`,
+      instruction: step.instruction,
+      timerMinutes: step.timerMinutes > 0 ? String(step.timerMinutes) : '',
+    })));
+  }
+
+  async function analyzeRecipeImport() {
+    if (!recipeImportMode || isRecipeImportAnalyzing) return;
+    if (recipeImportMode === 'link') {
+      try {
+        const url = new URL(recipeImportLink.trim());
+        if (url.protocol !== 'https:') throw new Error();
+      } catch {
+        setRecipeImportError(text('请输入完整的 https 菜谱链接。', 'Enter a complete HTTPS recipe URL.'));
+        return;
+      }
+    }
+    if (recipeImportMode === 'image' && !recipeImportImageData) return;
+
+    setIsRecipeImportAnalyzing(true);
+    setRecipeImportError(null);
+    try {
+      const analysis = recipeImportMode === 'image'
+        ? await analyzeRecipeImage(recipeImportImageData!)
+        : await analyzeRecipeLink(recipeImportLink.trim());
+      applyImportedRecipe(analysis.result);
+      setRecipeImportMode(null);
+      setRecipeImportImageUri(null);
+      setRecipeImportImageData(null);
+      setIsRecipeFormOpen(true);
+      setAiMessage(text(
+        'AI 已完成初步分析，请检查食材用量和步骤后再保存。',
+        'AI finished the first pass. Review ingredients and steps before saving.'
+      ));
+    } catch {
+      setRecipeImportError(text(
+        '暂时无法完成云端分析。请确认 OpenAI 项目有可用额度后重试。',
+        'Cloud analysis is unavailable. Check that the OpenAI project has available credits and try again.'
+      ));
+    } finally {
+      setIsRecipeImportAnalyzing(false);
     }
   }
 
@@ -453,10 +616,6 @@ export default function RecipesScreen() {
     setDraftName('');
     setDraftEmoji('🍳');
     setDraftDescription('');
-    setDraftMajorLibrary('recipes');
-    setDraftCategory('自定义');
-    setDraftTags([]);
-    setDraftCustomTag('');
     setDraftTime('20');
     setDraftServings('2');
     setDraftCarbs('0');
@@ -465,42 +624,31 @@ export default function RecipesScreen() {
     setDraftSteps([emptyStep()]);
   }
 
-  function toggleDraftTag(tag: string) {
-    setDraftTags((current) =>
-      current.includes(tag)
-        ? current.filter((item) => item !== tag)
-        : current.length < 6
-          ? [...current, tag]
-          : current
-    );
-  }
-
-  function addDraftCustomTag() {
-    const tag = draftCustomTag.trim().replace(/^#/, '').slice(0, 12);
-    if (!tag || draftTags.includes(tag) || draftTags.length >= 6) return;
-    setDraftTags((current) => [...current, tag]);
-    setDraftCustomTag('');
-  }
-
-  function saveRecipe() {
+  async function saveRecipe() {
     if (!validDraftRecipe) return;
-    const createdRecipe = addRecipe({
+    setIsAiOrganizing(true);
+    const recipeDraft = {
+      id: `draft-recipe-${Date.now()}`,
       name: draftName.trim(),
-      emoji: draftEmoji,
       description:
         draftDescription.trim() || text('我的自定义菜谱。', 'My custom recipe.'),
       timeMinutes: Number(draftTime),
-      difficulty: draftDifficulty,
-      category: draftCategory,
-      tags: draftTags,
-      servings: Number(draftServings),
-      carbsPerServing: Number(draftCarbs),
       ingredients: draftIngredients.map((ingredient) => ({
         name: ingredient.name.trim(),
         amount: Number(ingredient.amount),
         unit: ingredient.unit.trim(),
       })),
       steps: draftSteps.map((step) => step.instruction.trim()),
+    };
+    const organized = await organizeRecipesWithAI([recipeDraft]);
+    const categoryResult = organized.classifications[0]?.category ?? '其他';
+    const createdRecipe = addRecipe({
+      ...recipeDraft,
+      emoji: draftEmoji,
+      difficulty: draftDifficulty,
+      category: categoryResult,
+      servings: Number(draftServings),
+      carbsPerServing: Number(draftCarbs),
       stepsEn: draftSteps.map((step) => step.instruction.trim()),
       stepTimers: draftSteps.map((step) =>
         step.timerMinutes.trim().length > 0
@@ -510,17 +658,39 @@ export default function RecipesScreen() {
       tip: '烹饪前先确认所有食材和用量。',
       tipEn: 'Check every ingredient and amount before cooking.',
     });
+    const createdMajorLibrary: MajorRecipeLibrary = categoryResult === '烘焙谱' ? 'baking' : 'recipes';
     setIsRecipeFormOpen(false);
-    setMajorLibrary(draftMajorLibrary);
+    setMajorLibrary(createdMajorLibrary);
     setCategory('全部');
-    setSelectedTag('全部标签');
+    setShowAllRecipes(true);
+    setIsAiOrganizing(false);
     resetRecipeForm();
     setCompletionMessage(
-      draftMajorLibrary === 'baking'
-        ? text(`“${createdRecipe.name}”已经加入烘焙库。`, `“${createdRecipe.name}” joined your baking library.`)
-        : text(`“${createdRecipe.name}”已经加入菜谱库。`, `“${createdRecipe.name}” joined your recipe library.`)
+      text(
+        `AI 已将“${createdRecipe.name}”放入「${categoryResult}」${organized.source === 'local' ? '（本地整理）' : ''}。`,
+        `AI placed “${createdRecipe.name}” in ${categoryResult}${organized.source === 'local' ? ' using on-device fallback' : ''}.`
+      )
     );
     setRecipeCelebration(createdRecipe);
+  }
+
+  async function organizeExistingRecipes() {
+    if (isAiOrganizing || recipeOrganizationInput.length === 0) return;
+    setIsAiOrganizing(true);
+    setAiMessage(null);
+    const organized = await organizeRecipesWithAI(recipeOrganizationInput);
+    updateRecipeCategories(organized.classifications);
+    setCategory('全部');
+    setShowAllRecipes(true);
+    setAiMessage(text(
+      organized.source === 'openai'
+        ? `AI 已重新整理 ${organized.classifications.length} 道菜谱。`
+        : `网络 AI 暂不可用，已用本地智能规则整理 ${organized.classifications.length} 道菜谱。`,
+      organized.source === 'openai'
+        ? `AI reorganized ${organized.classifications.length} recipes.`
+        : `Cloud AI was unavailable, so local smart rules organized ${organized.classifications.length} recipes.`
+    ));
+    setIsAiOrganizing(false);
   }
 
   function startStepTimer(index: number) {
@@ -605,7 +775,8 @@ export default function RecipesScreen() {
         `Finished “${localizedName}”. Inventory and today's meal record are updated.`
       )
     );
-    setRecipeCompletion(recipe);
+    pendingRecipeCompletionRef.current = recipe;
+    closeRecipe();
   }
 
   function confirmUndoCooking() {
@@ -670,23 +841,32 @@ export default function RecipesScreen() {
           ? text('收藏甜点、面包与每一次烤箱里的期待。', 'Keep desserts, breads, and every oven-made favorite together.')
           : text('按家里的食材，快速找到今天能做的菜。', 'Find something you can make with what is already at home.')}
         action={(
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={text('查看烹饪历史', 'View cooking history')}
-            onPress={() => {
-              setHistoryMessage(null);
-              setIsHistoryOpen(true);
-            }}
-            style={({ pressed }) => [styles.historyIconButton, pressed && styles.cardPressed]}>
-            <Text style={styles.historyIcon}>↺</Text>
-            {cookingHistory.length > 0 ? (
-              <View style={styles.historyCountBadge}>
-                <Text style={styles.historyCountText}>
-                  {cookingHistory.length > 9 ? '9+' : cookingHistory.length}
-                </Text>
-              </View>
-            ) : null}
-          </Pressable>
+          <View style={styles.recipeHeaderActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={text('添加菜谱', 'Add recipe')}
+              onPress={openRecipeAddMenu}
+              style={({ pressed }) => [styles.addRecipeHeaderButton, pressed && styles.cardPressed]}>
+              <Animated.Text style={[styles.addRecipeHeaderIcon, recipeAddButtonIconStyle]}>＋</Animated.Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={text('查看烹饪历史', 'View cooking history')}
+              onPress={() => {
+                setHistoryMessage(null);
+                setIsHistoryOpen(true);
+              }}
+              style={({ pressed }) => [styles.historyIconButton, pressed && styles.cardPressed]}>
+              <Text style={styles.historyIcon}>↺</Text>
+              {cookingHistory.length > 0 ? (
+                <View style={styles.historyCountBadge}>
+                  <Text style={styles.historyCountText}>
+                    {cookingHistory.length > 9 ? '9+' : cookingHistory.length}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
+          </View>
         )}>
         {completionMessage ? (
           <Pressable
@@ -700,43 +880,14 @@ export default function RecipesScreen() {
           </Pressable>
         ) : null}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={majorLibrary === 'baking'
-            ? text('手动添加烘焙谱', 'Add a baking recipe manually')
-            : text('手动添加菜谱', 'Add a recipe manually')}
-          onPress={openRecipeForm}
-          style={({ pressed }) => [
-            styles.addRecipeCard,
-            majorLibrary === 'baking' && styles.addRecipeCardBaking,
-            pressed && styles.cardPressed,
-          ]}>
-          <View style={styles.addRecipeIcon}>
-            <Text style={styles.addRecipeIconText}>＋</Text>
-          </View>
-          <View style={styles.addRecipeCopy}>
-            <Text style={styles.addRecipeTitle}>
-              {majorLibrary === 'baking'
-                ? text('手动添加烘焙谱', 'Add your own baking recipe')
-                : text('手动添加菜谱', 'Add your own recipe')}
-            </Text>
-            <Text style={styles.addRecipeSubtitle}>
-              {majorLibrary === 'baking'
-                ? text('记录配方、温度和烘烤步骤', 'Enter ingredients, temperature, and baking steps')
-                : text('记录食材、数量和制作步骤', 'Enter ingredients, amounts, and cooking steps')}
-            </Text>
-          </View>
-          <Text style={styles.addRecipeChevron}>›</Text>
-        </Pressable>
-
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>⌕</Text>
           <TextInput
             value={search}
             onChangeText={setSearch}
             placeholder={majorLibrary === 'baking'
-              ? text('搜索烘焙谱、原料或标签', 'Search baking recipes, ingredients, or tags')
-              : text('搜索菜名、食材或标签', 'Search recipes, ingredients, or tags')}
+              ? text('搜索烘焙谱或原料', 'Search baking recipes or ingredients')
+              : text('搜索菜名或食材', 'Search recipes or ingredients')}
             placeholderTextColor={Colors.light.textSecondary}
             style={styles.searchInput}
             returnKeyType="search"
@@ -745,11 +896,30 @@ export default function RecipesScreen() {
 
         {majorLibrary === 'recipes' ? <View style={styles.recipeLibrarySection}>
           <View style={styles.recipeLibraryHeader}>
-            <Text style={styles.recipeLibraryHeading}>{text('菜谱分库', 'Recipe collections')}</Text>
-            <Text style={styles.recipeLibraryDetail}>
-              {text(`${recipeLibraries.length} 个分库`, `${recipeLibraries.length} collections`)}
-            </Text>
+            <View>
+              <Text style={styles.recipeLibraryHeading}>{text('AI 智能分库', 'AI collections')}</Text>
+              <Text style={styles.recipeLibraryDetail}>
+                {text('按菜名、食材与做法自动归档', 'Organized by recipe, ingredients, and method')}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={text('使用 AI 重新整理全部菜谱', 'Reorganize every recipe with AI')}
+              disabled={isAiOrganizing}
+              onPress={organizeExistingRecipes}
+              style={[styles.aiOrganizeButton, isAiOrganizing && styles.disabled]}>
+              <Text style={styles.aiOrganizeButtonText}>
+                {isAiOrganizing ? text('整理中…', 'Organizing…') : text('✦ 重新整理', '✦ Reorganize')}
+              </Text>
+            </Pressable>
           </View>
+          {aiMessage ? (
+            <Pressable onPress={() => setAiMessage(null)} style={styles.aiResultBanner}>
+              <Text style={styles.aiResultIcon}>✦</Text>
+              <Text style={styles.aiResultText}>{aiMessage}</Text>
+              <Text style={styles.aiResultClose}>×</Text>
+            </Pressable>
+          ) : null}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -768,7 +938,10 @@ export default function RecipesScreen() {
                     `${library.zh}，${count} 道菜`,
                     `${library.en}, ${count} recipes`
                   )}
-                  onPress={() => setCategory(library.key)}
+                  onPress={() => {
+                    setCategory(library.key);
+                    setShowAllRecipes(true);
+                  }}
                   style={[
                     styles.recipeLibraryCard,
                     { backgroundColor: selected ? library.color : `${library.color}18` },
@@ -799,37 +972,26 @@ export default function RecipesScreen() {
           </View>
         )}
 
-        <View style={styles.tagFilterSection}>
-          <Text style={styles.tagFilterLabel}>{text('标签筛选', 'Filter by tag')}</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.tagFilters}>
-            {availableRecipeTags.map((tag) => {
-              const selected = selectedTag === tag;
-              return (
-                <Pressable
-                  key={tag}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: selected }}
-                  onPress={() => setSelectedTag(tag)}
-                  style={[styles.tagFilter, selected && styles.tagFilterSelected]}>
-                  <Text style={[styles.tagFilterText, selected && styles.tagFilterTextSelected]}>
-                    {tag === '全部标签' ? '🏷️ ' : '# '}{localizeContent(tag, language)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-
         <View style={styles.section}>
           <SectionHeader
-            title={majorLibrary === 'baking' ? text('我的烘焙谱', 'My baking recipes') : text('为你整理', 'For you')}
-            detail={text(`${visibleRecipes.length} 道菜`, `${visibleRecipes.length} recipes`)}
+            title={sectionTitle}
+            detail={text(`${displayedRecipes.length} 道菜`, `${displayedRecipes.length} recipes`)}
           />
+          {majorLibrary === 'recipes' && category === '全部' && !search.trim() ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setShowAllRecipes((current) => !current)}
+              style={styles.recipeViewToggle}>
+              <Text style={styles.recipeViewToggleText}>
+                {showingRecent
+                  ? text(`查看全部 ${visibleRecipes.length} 道菜谱`, `View all ${visibleRecipes.length} recipes`)
+                  : text('返回最近烧过', 'Back to recently cooked')}
+              </Text>
+              <Text style={styles.recipeViewToggleArrow}>{showingRecent ? '›' : '↺'}</Text>
+            </Pressable>
+          ) : null}
           <View style={styles.recipeList}>
-            {visibleRecipes.map((recipe) => {
+            {displayedRecipes.map((recipe) => {
               const match = getRecipeMatch(recipe);
               const complete = match.percentage === 100;
               return (
@@ -855,15 +1017,6 @@ export default function RecipesScreen() {
                     <Text style={styles.recipeDescription} numberOfLines={2}>
                       {localizeContent(recipe.description, language)}
                     </Text>
-                    {(recipe.tags ?? []).length > 0 ? (
-                      <View style={styles.recipeTagRow}>
-                        {(recipe.tags ?? []).slice(0, 3).map((tag) => (
-                          <View key={`${recipe.id}-${tag}`} style={styles.recipeTagPill}>
-                            <Text style={styles.recipeTagText}>#{localizeContent(tag, language)}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    ) : null}
                     <View style={styles.recipeMeta}>
                       <Text style={styles.metaText}>⏱ {recipe.timeMinutes} {text('分钟', 'min')}</Text>
                       <Text style={styles.metaDot}>·</Text>
@@ -885,15 +1038,166 @@ export default function RecipesScreen() {
             })}
           </View>
 
-          {visibleRecipes.length === 0 ? (
+          {displayedRecipes.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyEmoji}>🥣</Text>
-              <Text style={styles.emptyTitle}>{text('没有找到相符的菜谱', 'No matching recipes')}</Text>
-              <Text style={styles.emptyText}>{text('换一个关键词或分类试试。', 'Try another keyword or category.')}</Text>
+              <Text style={styles.emptyTitle}>
+                {showingRecent
+                  ? text('还没有最近烧过的菜', 'Nothing cooked recently')
+                  : text('没有找到相符的菜谱', 'No matching recipes')}
+              </Text>
+              <Text style={styles.emptyText}>
+                {showingRecent
+                  ? text('完成一道菜后，它会自动出现在这里。', 'Finish a recipe and it will appear here automatically.')
+                  : text('换一个关键词或分类试试。', 'Try another keyword or category.')}
+              </Text>
             </View>
           ) : null}
         </View>
       </AppScreen>
+
+      <Modal
+        visible={isRecipeAddMenuOpen}
+        transparent
+        animationType="none"
+        onRequestClose={closeRecipeAddMenu}>
+        <View style={[styles.recipeAddBackdrop, { paddingTop: Math.max(insets.top, 12) + 64 }]}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={closeRecipeAddMenu} />
+          <Animated.View style={[styles.recipeAddSheet, recipeAddMenuStyle]}>
+            <Text style={styles.recipeAddTitle}>{text('添加菜谱', 'Add recipe')}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={text('基础添加菜谱', 'Add recipe manually')}
+              onPress={openBasicRecipeForm}
+              style={styles.recipeAddOption}>
+              <View style={styles.recipeAddOptionIcon}><Text style={styles.recipeAddOptionIconText}>＋</Text></View>
+              <View style={styles.recipeAddOptionCopy}>
+                <Text style={styles.recipeAddOptionTitle}>{text('基础添加', 'Basic add')}</Text>
+                <Text style={styles.recipeAddOptionText}>{text('使用现在的表单逐项填写', 'Use the current recipe form')}</Text>
+              </View>
+              <Text style={styles.recipeAddOptionChevron}>›</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={text('识图分析菜谱', 'Analyze recipe image')}
+              onPress={chooseRecipeImage}
+              style={[styles.recipeAddOption, styles.recipeAddOptionAi]}>
+              <View style={[styles.recipeAddOptionIcon, styles.recipeAddOptionIconAi]}><Text style={styles.recipeAddOptionAiText}>▧</Text></View>
+              <View style={styles.recipeAddOptionCopy}>
+                <Text style={styles.recipeAddOptionTitle}>{text('识图分析', 'Analyze image')}</Text>
+                <Text style={styles.recipeAddOptionText}>{text('选择截图或菜谱照片，AI 自动提取', 'Pick a screenshot or recipe photo')}</Text>
+              </View>
+              <Text style={styles.recipeAddOptionChevron}>›</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={text('链接分析菜谱', 'Analyze recipe link')}
+              onPress={openRecipeLinkImport}
+              style={[styles.recipeAddOption, styles.recipeAddOptionAi]}>
+              <View style={[styles.recipeAddOptionIcon, styles.recipeAddOptionIconAi]}><Text style={styles.recipeAddOptionAiText}>↗</Text></View>
+              <View style={styles.recipeAddOptionCopy}>
+                <Text style={styles.recipeAddOptionTitle}>{text('链接分析', 'Analyze link')}</Text>
+                <Text style={styles.recipeAddOptionText}>{text('粘贴网页菜谱链接，AI 自动整理', 'Paste a recipe URL for AI extraction')}</Text>
+              </View>
+              <Text style={styles.recipeAddOptionChevron}>›</Text>
+            </Pressable>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={recipeImportMode !== null}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setRecipeImportMode(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.formPage}>
+          <View style={[styles.formHeader, { paddingTop: Math.max(insets.top, 12) }]}>
+            <Pressable accessibilityRole="button" onPress={() => setRecipeImportMode(null)} style={styles.formHeaderSide}>
+              <Text style={styles.formCancelText}>{text('取消', 'Cancel')}</Text>
+            </Pressable>
+            <Text style={styles.formHeaderTitle}>
+              {recipeImportMode === 'image' ? text('识图分析', 'Analyze image') : text('链接分析', 'Analyze link')}
+            </Text>
+            <View style={styles.formHeaderSide} />
+          </View>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.recipeImportContent}>
+            <View style={styles.recipeImportIntro}>
+              <Text style={styles.recipeImportIntroIcon}>✦</Text>
+              <View style={styles.recipeImportIntroCopy}>
+                <Text style={styles.recipeImportIntroTitle}>
+                  {recipeImportMode === 'image'
+                    ? text('从图片提取完整菜谱', 'Extract a recipe from an image')
+                    : text('从网页链接整理菜谱', 'Organize a recipe from the web')}
+                </Text>
+                <Text style={styles.recipeImportIntroText}>
+                  {text('AI 会生成可编辑草稿，保存前请检查食材用量和步骤。', 'AI creates an editable draft. Review amounts and steps before saving.')}
+                </Text>
+              </View>
+            </View>
+
+            {recipeImportMode === 'image' ? (
+              recipeImportImageUri ? (
+                <View style={styles.recipeImagePreviewCard}>
+                  <Image source={{ uri: recipeImportImageUri }} resizeMode="contain" style={styles.recipeImagePreview} />
+                  <Pressable accessibilityRole="button" onPress={chooseRecipeImage} style={styles.changeRecipeImageButton}>
+                    <Text style={styles.changeRecipeImageText}>{text('重新选择图片', 'Choose another image')}</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable accessibilityRole="button" onPress={chooseRecipeImage} style={styles.emptyRecipeImageButton}>
+                  <Text style={styles.emptyRecipeImageIcon}>▧</Text>
+                  <Text style={styles.emptyRecipeImageTitle}>{text('选择菜谱图片', 'Choose a recipe image')}</Text>
+                </Pressable>
+              )
+            ) : (
+              <View style={styles.recipeLinkField}>
+                <Text style={styles.fieldLabel}>{text('菜谱链接', 'Recipe URL')}</Text>
+                <TextInput
+                  accessibilityLabel={text('输入菜谱链接', 'Recipe URL')}
+                  value={recipeImportLink}
+                  onChangeText={setRecipeImportLink}
+                  placeholder="https://…"
+                  placeholderTextColor={Colors.light.textSecondary}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  style={styles.formInput}
+                />
+              </View>
+            )}
+
+            <View style={styles.recipeImportPrivacy}>
+              <Text style={styles.recipeImportPrivacyIcon}>ⓘ</Text>
+              <Text style={styles.recipeImportPrivacyText}>
+                {recipeImportMode === 'image'
+                  ? text('所选图片会发送给 OpenAI 进行分析。', 'The selected image is sent to OpenAI for analysis.')
+                  : text('链接会发送给 OpenAI，并使用网页搜索读取公开内容。', 'The URL is sent to OpenAI and web search reads its public content.')}
+              </Text>
+            </View>
+
+            {recipeImportError ? (
+              <View style={styles.recipeImportError}>
+                <Text style={styles.recipeImportErrorIcon}>!</Text>
+                <Text style={styles.recipeImportErrorText}>{recipeImportError}</Text>
+              </View>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={text('开始分析菜谱', 'Analyze recipe')}
+              disabled={isRecipeImportAnalyzing || (recipeImportMode === 'image' ? !recipeImportImageData : !recipeImportLink.trim())}
+              onPress={analyzeRecipeImport}
+              style={[
+                styles.recipeImportAnalyzeButton,
+                (isRecipeImportAnalyzing || (recipeImportMode === 'image' ? !recipeImportImageData : !recipeImportLink.trim())) && styles.primaryActionDisabled,
+              ]}>
+              <Text style={styles.recipeImportAnalyzeText}>
+                {isRecipeImportAnalyzing ? text('AI 正在分析…', 'AI is analyzing…') : text('✦ 一键分析并生成草稿', '✦ Analyze and create draft')}
+              </Text>
+            </Pressable>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <Modal
         visible={isHistoryOpen}
@@ -1033,42 +1337,37 @@ export default function RecipesScreen() {
               </View>
             )}
           </ScrollView>
-        </View>
-      </Modal>
-
-      <Modal
-        transparent
-        visible={undoCandidate !== null}
-        animationType="fade"
-        onRequestClose={() => setUndoCandidate(null)}>
-        <View style={styles.undoBackdrop}>
-          <View style={styles.undoDialog}>
-            <View style={styles.undoDialogIcon}>
-              <Text style={styles.undoDialogIconText}>↺</Text>
+          {undoCandidate ? (
+            <View style={[StyleSheet.absoluteFillObject, styles.undoBackdrop]}>
+              <View style={styles.undoDialog}>
+                <View style={styles.undoDialogIcon}>
+                  <Text style={styles.undoDialogIconText}>↺</Text>
+                </View>
+                <Text style={styles.undoDialogTitle}>{text('确认重置这次记录？', 'Reset this completion?')}</Text>
+                <Text style={styles.undoDialogText}>
+                  {text(
+                    `“${localizeContent(undoCandidate.recipeName, language)}”消耗的食材会补回原库存，相关饮食记录也会同步修正。`,
+                    `Ingredients used for “${localizeContent(undoCandidate.recipeName, language)}” will return to stock and its meal log will be corrected.`
+                  )}
+                </Text>
+                <View style={styles.undoDialogActions}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setUndoCandidate(null)}
+                    style={styles.undoCancelButton}>
+                    <Text style={styles.undoCancelText}>{text('保留记录', 'Keep it')}</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={text('确认重置并补回食材', 'Confirm reset and restore ingredients')}
+                    onPress={confirmUndoCooking}
+                    style={styles.undoConfirmButton}>
+                    <Text style={styles.undoConfirmText}>{text('确认重置', 'Reset')}</Text>
+                  </Pressable>
+                </View>
+              </View>
             </View>
-            <Text style={styles.undoDialogTitle}>{text('确认重置这次记录？', 'Reset this completion?')}</Text>
-            <Text style={styles.undoDialogText}>
-              {text(
-                `“${undoCandidate ? localizeContent(undoCandidate.recipeName, language) : ''}”消耗的食材会补回原库存，相关饮食记录也会同步修正。`,
-                `Ingredients used for “${undoCandidate ? localizeContent(undoCandidate.recipeName, language) : ''}” will return to stock and its meal log will be corrected.`
-              )}
-            </Text>
-            <View style={styles.undoDialogActions}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setUndoCandidate(null)}
-                style={styles.undoCancelButton}>
-                <Text style={styles.undoCancelText}>{text('保留记录', 'Keep it')}</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={text('确认重置并补回食材', 'Confirm reset and restore ingredients')}
-                onPress={confirmUndoCooking}
-                style={styles.undoConfirmButton}>
-                <Text style={styles.undoConfirmText}>{text('确认重置', 'Reset')}</Text>
-              </Pressable>
-            </View>
-          </View>
+          ) : null}
         </View>
       </Modal>
 
@@ -1076,6 +1375,7 @@ export default function RecipesScreen() {
         visible={selectedRecipe !== null}
         animationType="none"
         presentationStyle="fullScreen"
+        onDismiss={handleRecipeDetailDismiss}
         onRequestClose={closeRecipe}>
         {selectedRecipe ? (
           <Animated.View style={[styles.detailPage, detailRevealStyle]}>
@@ -1123,15 +1423,6 @@ export default function RecipesScreen() {
                     <Text style={styles.detailMeta}>⏱ {selectedRecipe.timeMinutes}{text('分钟', ' min')}</Text>
                     <Text style={styles.detailMeta}>◎ {localizeContent(selectedRecipe.difficulty, language)}</Text>
                   </View>
-                  {(selectedRecipe.tags ?? []).length > 0 ? (
-                    <View style={styles.detailTagRow}>
-                      {(selectedRecipe.tags ?? []).map((tag) => (
-                        <View key={`${selectedRecipe.id}-detail-${tag}`} style={styles.detailTagPill}>
-                          <Text style={styles.detailTagText}>#{localizeContent(tag, language)}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
                 </View>
               </View>
 
@@ -1394,16 +1685,16 @@ export default function RecipesScreen() {
               <Text style={styles.formCancelText}>{text('取消', 'Cancel')}</Text>
             </Pressable>
             <Text style={styles.formHeaderTitle}>
-              {draftMajorLibrary === 'baking' ? text('新建烘焙谱', 'New baking recipe') : text('新建菜谱', 'New recipe')}
+              {text('新建菜谱', 'New recipe')}
             </Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ disabled: !validDraftRecipe }}
-              disabled={!validDraftRecipe}
+              accessibilityState={{ disabled: !validDraftRecipe || isAiOrganizing }}
+              disabled={!validDraftRecipe || isAiOrganizing}
               onPress={saveRecipe}
               style={styles.formHeaderSide}>
-              <Text style={[styles.formSaveText, !validDraftRecipe && styles.formSaveTextDisabled]}>
-                {text('保存', 'Save')}
+              <Text style={[styles.formSaveText, (!validDraftRecipe || isAiOrganizing) && styles.formSaveTextDisabled]}>
+                {isAiOrganizing ? text('AI 整理中…', 'AI organizing…') : text('保存', 'Save')}
               </Text>
             </Pressable>
           </View>
@@ -1419,12 +1710,12 @@ export default function RecipesScreen() {
               <Text style={styles.formIntroEmoji}>{draftEmoji}</Text>
               <View style={styles.formIntroCopy}>
                 <Text style={styles.formIntroTitle}>
-                  {draftMajorLibrary === 'baking' ? text('收藏你的烘焙配方', 'Save your favorite bake') : text('记录你的拿手菜', 'Save your signature dish')}
+                  {text('记录你的拿手菜', 'Save your signature dish')}
                 </Text>
                 <Text style={styles.formIntroText}>
                   {text(
-                    '食材名称会自动和库存匹配，数量会随制作份数换算。',
-                    'Ingredient names match your inventory and amounts scale with servings.'
+                    '填写菜名、食材和步骤后，AI 会自动识别分类并放进合适的菜谱库。',
+                    'After you enter the recipe, AI will choose the right collection automatically.'
                   )}
                 </Text>
               </View>
@@ -1433,7 +1724,7 @@ export default function RecipesScreen() {
             <View style={styles.formSection}>
               <Text style={styles.formSectionTitle}>{text('基本信息', 'Basics')}</Text>
               <Text style={styles.fieldLabel}>
-                {draftMajorLibrary === 'baking' ? text('烘焙谱名称 *', 'Baking recipe name *') : text('菜谱名称 *', 'Recipe name *')}
+                {text('菜谱名称 *', 'Recipe name *')}
               </Text>
               <TextInput
                 value={draftName}
@@ -1469,113 +1760,14 @@ export default function RecipesScreen() {
                 maxLength={160}
               />
 
-              <Text style={styles.fieldLabel}>{text('保存到大库', 'Save to library')}</Text>
-              <View style={styles.majorLibraryChoices}>
-                {([
-                  { key: 'recipes' as const, zh: '菜谱库', en: 'Recipes', emoji: '🍳', color: Colors.light.primary },
-                  { key: 'baking' as const, zh: '烘焙库', en: 'Baking', emoji: '🧁', color: '#B96F45' },
-                ]).map((item) => {
-                  const selected = draftMajorLibrary === item.key;
-                  return <Pressable
-                    key={item.key}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: selected }}
-                    onPress={() => changeDraftMajorLibrary(item.key)}
-                    style={[styles.majorLibraryChoice, selected && { backgroundColor: item.color, borderColor: item.color }]}>
-                    <Text style={styles.majorLibraryChoiceEmoji}>{item.emoji}</Text>
-                    <Text style={[styles.majorLibraryChoiceText, selected && styles.majorLibraryChoiceTextSelected]}>
-                      {text(item.zh, item.en)}
-                    </Text>
-                    <Text style={[styles.majorLibraryChoiceCheck, selected && styles.majorLibraryChoiceCheckSelected]}>
-                      {selected ? '✓' : '○'}
-                    </Text>
-                  </Pressable>;
-                })}
-              </View>
-
-              {draftMajorLibrary === 'recipes' ? <>
-                <Text style={styles.fieldLabel}>{text('菜谱分类', 'Recipe category')}</Text>
-                <View style={styles.choiceWrap}>
-                  {recipeCategories.map((item) => (
-                  <Pressable
-                    key={item.key}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: draftCategory === item.key }}
-                    onPress={() => setDraftCategory(item.key)}
-                    style={[
-                      styles.choiceChip,
-                      draftCategory === item.key && { backgroundColor: item.color, borderColor: item.color },
-                    ]}>
-                    <Text style={[styles.choiceChipText, draftCategory === item.key && styles.categoryChoiceTextSelected]}>
-                      {item.emoji} {text(item.zh, item.en)}
-                    </Text>
-                  </Pressable>
-                  ))}
-                </View>
-              </> : (
-                <View style={styles.bakingFormHint}>
-                  <Text style={styles.bakingFormHintEmoji}>🧁</Text>
-                  <Text style={styles.bakingFormHintText}>
-                    {text('这份配方会单独收藏到烘焙库。', 'This recipe will be kept in your separate baking library.')}
+              <View style={styles.aiFormHint}>
+                <Text style={styles.aiFormHintIcon}>✦</Text>
+                <View style={styles.aiFormHintCopy}>
+                  <Text style={styles.aiFormHintTitle}>{text('AI 自动分库', 'AI auto-organization')}</Text>
+                  <Text style={styles.aiFormHintText}>
+                    {text('无需选择分类或标签；保存时会自动放入快手菜、一锅料理、下饭菜、面食、其他或烘焙谱。', 'No manual category or tags needed. AI will choose the best collection when you save.')}
                   </Text>
                 </View>
-              )}
-
-              <View style={styles.formTagHeadingRow}>
-                <View>
-                  <Text style={styles.fieldLabel}>{text('标签', 'Tags')}</Text>
-                  <Text style={styles.formTagHint}>{text('最多选择 6 个', 'Choose up to 6')}</Text>
-                </View>
-                <Text style={styles.formTagCount}>{draftTags.length}/6</Text>
-              </View>
-              <View style={styles.choiceWrap}>
-                {Array.from(new Set([
-                  ...(draftMajorLibrary === 'baking' ? bakingRecipeTags : commonRecipeTags),
-                  ...draftTags,
-                ])).map((tag) => {
-                  const selected = draftTags.includes(tag);
-                  const disabled = !selected && draftTags.length >= 6;
-                  return (
-                    <Pressable
-                      key={tag}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: selected, disabled }}
-                      disabled={disabled}
-                      onPress={() => toggleDraftTag(tag)}
-                      style={[
-                        styles.formTagChip,
-                        selected && styles.formTagChipSelected,
-                        disabled && styles.disabled,
-                      ]}>
-                      <Text style={[styles.formTagChipText, selected && styles.formTagChipTextSelected]}>
-                        #{localizeContent(tag, language)} {selected ? '✓' : ''}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <View style={styles.customTagRow}>
-                <TextInput
-                  value={draftCustomTag}
-                  onChangeText={setDraftCustomTag}
-                  onSubmitEditing={addDraftCustomTag}
-                  placeholder={text('输入自定义标签', 'Enter a custom tag')}
-                  placeholderTextColor={Colors.light.textSecondary}
-                  style={[styles.formInput, styles.customTagInput]}
-                  returnKeyType="done"
-                  maxLength={13}
-                />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={text('添加自定义标签', 'Add custom tag')}
-                  disabled={!draftCustomTag.trim() || draftTags.length >= 6}
-                  onPress={addDraftCustomTag}
-                  style={[
-                    styles.customTagButton,
-                    (!draftCustomTag.trim() || draftTags.length >= 6) && styles.disabled,
-                  ]}>
-                  <Text style={styles.customTagButtonText}>{text('添加', 'Add')}</Text>
-                </Pressable>
               </View>
 
               <View style={styles.compactFieldsRow}>
@@ -1844,10 +2036,12 @@ export default function RecipesScreen() {
 
             <Pressable
               accessibilityRole="button"
-              disabled={!validDraftRecipe}
+              disabled={!validDraftRecipe || isAiOrganizing}
               onPress={saveRecipe}
-              style={[styles.saveRecipeButton, !validDraftRecipe && styles.primaryActionDisabled]}>
-              <Text style={styles.saveRecipeButtonText}>{text('保存并查看菜谱', 'Save and view recipe')}</Text>
+              style={[styles.saveRecipeButton, (!validDraftRecipe || isAiOrganizing) && styles.primaryActionDisabled]}>
+              <Text style={styles.saveRecipeButtonText}>
+                {isAiOrganizing ? text('AI 正在分库…', 'AI is organizing…') : text('保存并由 AI 自动分库', 'Save with AI organization')}
+              </Text>
             </Pressable>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -1873,7 +2067,6 @@ export default function RecipesScreen() {
           language={language}
           onComplete={() => {
             setRecipeCompletion(null);
-            finishClosingRecipe();
           }}
         />
       ) : null}
@@ -1936,7 +2129,7 @@ const styles = StyleSheet.create({
   historyEmptyEmoji: { fontSize: 48 },
   historyEmptyTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '900' },
   historyEmptyText: { color: Colors.light.textSecondary, fontSize: 11.5, lineHeight: 18, textAlign: 'center' },
-  undoBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#17251FC2' },
+  undoBackdrop: { zIndex: 50, elevation: 20, flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#17251FC2' },
   undoDialog: { width: '100%', maxWidth: 390, alignItems: 'center', gap: 13, padding: 22, borderRadius: 27, backgroundColor: Colors.light.surface, shadowColor: '#102C23', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.28, shadowRadius: 24, elevation: 12 },
   undoDialogIcon: { width: 57, height: 57, alignItems: 'center', justifyContent: 'center', borderRadius: 29, backgroundColor: Colors.light.warningSoft },
   undoDialogIconText: { color: Colors.light.warning, fontSize: 32, fontWeight: '800' },
@@ -1966,6 +2159,12 @@ const styles = StyleSheet.create({
   recipeLibraryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   recipeLibraryHeading: { color: Colors.light.text, fontSize: 17, fontWeight: '900' },
   recipeLibraryDetail: { color: Colors.light.textSecondary, fontSize: 10.5, fontWeight: '700' },
+  aiOrganizeButton: { minHeight: 36, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, borderRadius: 12, backgroundColor: Colors.light.primarySoft, borderWidth: 1, borderColor: '#B7DCC5' },
+  aiOrganizeButtonText: { color: Colors.light.primary, fontSize: 10.5, fontWeight: '900' },
+  aiResultBanner: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 15, backgroundColor: '#F0EBFF', borderWidth: 1, borderColor: '#D7CBF2' },
+  aiResultIcon: { color: '#735C9B', fontSize: 17, fontWeight: '900' },
+  aiResultText: { flex: 1, color: '#654D8B', fontSize: 10.5, lineHeight: 16, fontWeight: '800' },
+  aiResultClose: { color: '#735C9B', fontSize: 18 },
   recipeLibraries: { gap: 9, paddingRight: 8 },
   recipeLibraryCard: { minWidth: 124, minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 19, borderWidth: 1, borderColor: '#FFFFFF75' },
   recipeLibraryCardSelected: { shadowColor: '#173D2F', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 3 },
@@ -1993,6 +2192,9 @@ const styles = StyleSheet.create({
   filterText: { color: Colors.light.textSecondary, fontSize: 13, fontWeight: '700' },
   filterTextSelected: { color: '#FFFFFF' },
   section: { gap: Spacing.three },
+  recipeViewToggle: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 13, borderRadius: 14, backgroundColor: Colors.light.backgroundElement },
+  recipeViewToggleText: { color: Colors.light.primary, fontSize: 11, fontWeight: '900' },
+  recipeViewToggleArrow: { color: Colors.light.primary, fontSize: 20, fontWeight: '700' },
   recipeList: { gap: 12 },
   recipeCard: { flexDirection: 'row', overflow: 'hidden', minHeight: 178, borderRadius: 22, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   cardPressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
@@ -2136,6 +2338,11 @@ const styles = StyleSheet.create({
   emojiOption: { width: 47, height: 47, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: Colors.light.backgroundElement, borderWidth: 1, borderColor: 'transparent' },
   emojiOptionSelected: { backgroundColor: Colors.light.primarySoft, borderColor: Colors.light.primary },
   emojiOptionText: { fontSize: 25 },
+  aiFormHint: { minHeight: 72, flexDirection: 'row', alignItems: 'flex-start', gap: 11, padding: 13, borderRadius: 17, backgroundColor: '#F0EBFF', borderWidth: 1, borderColor: '#D7CBF2' },
+  aiFormHintIcon: { width: 30, height: 30, overflow: 'hidden', textAlign: 'center', lineHeight: 30, borderRadius: 15, color: '#FFFFFF', backgroundColor: '#735C9B', fontSize: 15, fontWeight: '900' },
+  aiFormHintCopy: { flex: 1, gap: 4 },
+  aiFormHintTitle: { color: '#59417F', fontSize: 12, fontWeight: '900' },
+  aiFormHintText: { color: '#745F93', fontSize: 10.5, lineHeight: 16, fontWeight: '700' },
   choiceWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   choiceChip: { minHeight: 38, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 13, backgroundColor: Colors.light.backgroundElement, borderWidth: 1, borderColor: 'transparent' },
   choiceChipSelected: { backgroundColor: Colors.light.primarySoft, borderColor: Colors.light.primary },
@@ -2194,4 +2401,44 @@ const styles = StyleSheet.create({
   validationHint: { color: Colors.light.danger, fontSize: 11, lineHeight: 17, textAlign: 'center', fontWeight: '700', paddingHorizontal: 15 },
   saveRecipeButton: { minHeight: 58, alignItems: 'center', justifyContent: 'center', borderRadius: 19, backgroundColor: Colors.light.primary },
   saveRecipeButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
+  recipeHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  addRecipeHeaderButton: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 26, backgroundColor: Colors.light.primary, shadowColor: '#173D2F', shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.14, shadowRadius: 12, elevation: 3 },
+  addRecipeHeaderIcon: { color: '#FFFFFF', fontSize: 28, lineHeight: 30, fontWeight: '600' },
+  recipeAddBackdrop: { flex: 1, alignItems: 'flex-end', paddingHorizontal: 14, backgroundColor: '#16221C38' },
+  recipeAddSheet: { width: 302, gap: 8, padding: 11, borderRadius: 22, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: '#FFFFFF', shadowColor: '#173D2F', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 24, elevation: 8 },
+  recipeAddHandle: { width: 42, height: 4, alignSelf: 'center', borderRadius: 2, backgroundColor: Colors.light.border, marginBottom: 3 },
+  recipeAddTitle: { color: Colors.light.text, fontSize: 14, fontWeight: '900', paddingHorizontal: 5, paddingTop: 2, paddingBottom: 1 },
+  recipeAddSubtitle: { color: Colors.light.textSecondary, fontSize: 11.5, marginBottom: 3 },
+  recipeAddOption: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 9, borderRadius: 16, backgroundColor: Colors.light.background, borderWidth: 1, borderColor: Colors.light.border },
+  recipeAddOptionAi: { backgroundColor: '#F5F1FF', borderColor: '#D7CBF2' },
+  recipeAddOptionIcon: { width: 39, height: 39, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: Colors.light.primarySoft },
+  recipeAddOptionIconAi: { backgroundColor: '#735C9B' },
+  recipeAddOptionIconText: { color: Colors.light.primary, fontSize: 24, fontWeight: '700' },
+  recipeAddOptionAiText: { color: '#FFFFFF', fontSize: 19, fontWeight: '900' },
+  recipeAddOptionCopy: { flex: 1, gap: 3 },
+  recipeAddOptionTitle: { color: Colors.light.text, fontSize: 13.5, fontWeight: '900' },
+  recipeAddOptionText: { color: Colors.light.textSecondary, fontSize: 10.5, lineHeight: 15 },
+  recipeAddOptionChevron: { color: Colors.light.textSecondary, fontSize: 24 },
+  recipeImportContent: { width: '100%', maxWidth: 680, alignSelf: 'center', gap: 15, padding: 18, paddingBottom: 44 },
+  recipeImportIntro: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 15, borderRadius: 21, backgroundColor: '#735C9B' },
+  recipeImportIntroIcon: { width: 42, height: 42, overflow: 'hidden', textAlign: 'center', lineHeight: 42, borderRadius: 15, color: '#735C9B', backgroundColor: '#FFFFFF', fontSize: 18, fontWeight: '900' },
+  recipeImportIntroCopy: { flex: 1, gap: 4 },
+  recipeImportIntroTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
+  recipeImportIntroText: { color: '#EEE8FA', fontSize: 10.5, lineHeight: 16 },
+  recipeImagePreviewCard: { overflow: 'hidden', gap: 10, padding: 10, borderRadius: 21, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
+  recipeImagePreview: { width: '100%', height: 290, borderRadius: 15, backgroundColor: Colors.light.backgroundElement },
+  changeRecipeImageButton: { minHeight: 43, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: Colors.light.backgroundElement },
+  changeRecipeImageText: { color: Colors.light.primary, fontSize: 11.5, fontWeight: '900' },
+  emptyRecipeImageButton: { minHeight: 190, alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 21, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: '#D7CBF2', borderStyle: 'dashed' },
+  emptyRecipeImageIcon: { color: '#735C9B', fontSize: 38, fontWeight: '800' },
+  emptyRecipeImageTitle: { color: '#654D8B', fontSize: 13, fontWeight: '900' },
+  recipeLinkField: { gap: 8 },
+  recipeImportPrivacy: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 11, borderRadius: 14, backgroundColor: Colors.light.backgroundElement },
+  recipeImportPrivacyIcon: { color: Colors.light.textSecondary, fontSize: 13, fontWeight: '900' },
+  recipeImportPrivacyText: { flex: 1, color: Colors.light.textSecondary, fontSize: 10, lineHeight: 15 },
+  recipeImportError: { flexDirection: 'row', alignItems: 'center', gap: 9, padding: 12, borderRadius: 15, backgroundColor: Colors.light.dangerSoft },
+  recipeImportErrorIcon: { width: 25, height: 25, overflow: 'hidden', textAlign: 'center', lineHeight: 25, borderRadius: 13, color: '#FFFFFF', backgroundColor: Colors.light.danger, fontWeight: '900' },
+  recipeImportErrorText: { flex: 1, color: Colors.light.danger, fontSize: 10.5, lineHeight: 16, fontWeight: '800' },
+  recipeImportAnalyzeButton: { minHeight: 57, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: '#735C9B' },
+  recipeImportAnalyzeText: { color: '#FFFFFF', fontSize: 13.5, fontWeight: '900' },
 });

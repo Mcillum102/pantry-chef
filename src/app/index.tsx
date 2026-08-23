@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -10,23 +10,20 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from 'react-native';
+import Swipeable, {
+  type SwipeableMethods,
+} from 'react-native-gesture-handler/ReanimatedSwipeable';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
   Extrapolation,
   interpolate,
-  interpolateColor,
-  ReduceMotion,
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import Swipeable, {
-  type SwipeableMethods,
-} from 'react-native-gesture-handler/ReanimatedSwipeable';
 
 import { AppScreen, SectionHeader } from '@/components/app-screen';
 import { BarcodeScanner } from '@/components/barcode-scanner';
@@ -43,10 +40,11 @@ import {
   type StorageLocation,
 } from '@/data/kitchen-data';
 import { getShelfLifeSuggestion } from '@/data/shelf-life-data';
+import type { SmartInventoryItem } from '@/data/ai-import';
+import { analyzeInventoryText } from '@/services/ai-import';
 import { lookupBarcodeProduct } from '@/services/product-lookup';
 
 type InventoryView = '全部' | InventoryLibrary;
-type RevealOrigin = { x: number; y: number };
 type StorageCelebrationData = {
   emoji: string;
   itemName: string;
@@ -190,7 +188,7 @@ type InventorySwipeRowProps = {
   libraryColor: string;
   onOpen: (methods: SwipeableMethods) => void;
   onClose: (methods: SwipeableMethods) => void;
-  onPress: (origin: RevealOrigin) => void;
+  onPress: () => void;
   onDelete: () => void;
 };
 
@@ -240,12 +238,7 @@ function InventorySwipeRow({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={text(`查看${item.name}详情`, `View ${localizeContent(item.name, language)} details`)}
-        onPress={(event) =>
-          onPress({
-            x: event.nativeEvent.pageX,
-            y: event.nativeEvent.pageY,
-          })
-        }
+        onPress={onPress}
         style={({ pressed }) => [
           styles.inventoryRow,
           item.quantity === 0 && styles.usedRow,
@@ -292,7 +285,7 @@ function InventorySwipeRow({
 
 export default function InventoryScreen() {
   const { language, locale, text } = useLanguage();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const {
     inventory,
     transactions,
@@ -307,6 +300,15 @@ export default function InventoryScreen() {
   } = useKitchen();
   const inventoryViews = [allInventoryView, ...libraries];
   const [isAdding, setIsAdding] = useState(false);
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
+  const addMenuProgress = useSharedValue(0);
+  const [isSmartAddOpen, setIsSmartAddOpen] = useState(false);
+  const [smartInput, setSmartInput] = useState('');
+  const [smartItems, setSmartItems] = useState<SmartInventoryItem[]>([]);
+  const [selectedSmartItemIds, setSelectedSmartItemIds] = useState<string[]>([]);
+  const [isSmartAnalyzing, setIsSmartAnalyzing] = useState(false);
+  const [smartAnalysisSource, setSmartAnalysisSource] = useState<'openai' | 'local' | null>(null);
+  const [smartAddMessage, setSmartAddMessage] = useState<string | null>(null);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState(getEmojiOptions('食材')[0]);
@@ -325,9 +327,8 @@ export default function InventoryScreen() {
   const [scanStatus, setScanStatus] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [storageCelebration, setStorageCelebration] = useState<StorageCelebrationData | null>(null);
-  const detailRevealProgress = useSharedValue(0);
-  const detailOriginX = useSharedValue(windowWidth / 2);
-  const detailOriginY = useSharedValue(windowHeight / 2);
+  const pendingStorageCelebrationRef = useRef<StorageCelebrationData | null>(null);
+  const pendingDetailEditRef = useRef<InventoryItem | null>(null);
   const [isCreatingLibrary, setIsCreatingLibrary] = useState(false);
   const [newLibraryName, setNewLibraryName] = useState('');
   const [newLibraryEmoji, setNewLibraryEmoji] = useState(customLibraryEmojis[0]);
@@ -339,6 +340,25 @@ export default function InventoryScreen() {
   const [selectedStorageFilter, setSelectedStorageFilter] = useState<StorageLocation | '全部位置'>(
     '全部位置'
   );
+
+  const addButtonIconStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        rotate: `${interpolate(addMenuProgress.value, [0, 1], [0, 45], Extrapolation.CLAMP)}deg`,
+      },
+    ],
+  }));
+
+  const addMenuStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(addMenuProgress.value, [0, 0.2, 1], [0, 0.72, 1], Extrapolation.CLAMP),
+    transform: [
+      { translateY: interpolate(addMenuProgress.value, [0, 1], [-12, 0], Extrapolation.CLAMP) },
+      { scale: interpolate(addMenuProgress.value, [0, 1], [0.82, 1], Extrapolation.CLAMP) },
+      {
+        rotate: `${interpolate(addMenuProgress.value, [0, 1], [-7, 0], Extrapolation.CLAMP)}deg`,
+      },
+    ],
+  }));
   const openSwipeableRef = useRef<SwipeableMethods | null>(null);
   const closeStorageCelebration = useCallback(() => setStorageCelebration(null), []);
   const selectedItemTransactions = useMemo(
@@ -354,58 +374,6 @@ export default function InventoryScreen() {
         : [],
     [selectedItem, transactions]
   );
-
-  useEffect(() => {
-    if (!selectedItem) return;
-
-    detailRevealProgress.set(
-      withTiming(1, {
-        duration: 420,
-        easing: Easing.bezier(0.16, 1, 0.3, 1),
-        reduceMotion: ReduceMotion.System,
-      })
-    );
-  }, [detailRevealProgress, selectedItem]);
-
-  const detailRevealStyle = useAnimatedStyle(() => {
-    const progress = detailRevealProgress.value;
-    const startTranslateX = detailOriginX.value - windowWidth / 2;
-    const startTranslateY = detailOriginY.value - windowHeight / 2;
-
-    return {
-      opacity: interpolate(progress, [0, 0.18, 1], [0, 0.92, 1], Extrapolation.CLAMP),
-      borderRadius: interpolate(progress, [0, 1], [38, 0], Extrapolation.CLAMP),
-      transform: [
-        {
-          translateX: interpolate(
-            progress,
-            [0, 1],
-            [startTranslateX, 0],
-            Extrapolation.CLAMP
-          ),
-        },
-        {
-          translateY: interpolate(
-            progress,
-            [0, 1],
-            [startTranslateY, 0],
-            Extrapolation.CLAMP
-          ),
-        },
-        {
-          scale: interpolate(progress, [0, 1], [0.06, 1], Extrapolation.CLAMP),
-        },
-      ],
-    };
-  }, [windowHeight, windowWidth]);
-
-  const detailBackdropStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      detailRevealProgress.value,
-      [0, 1],
-      ['rgba(28, 42, 34, 0)', 'rgba(28, 42, 34, 0.22)']
-    ),
-  }));
 
   const selectedLibraryInfo =
     inventoryViews.find((option) => option.key === selectedLibrary) ?? inventoryViews[0];
@@ -514,6 +482,80 @@ export default function InventoryScreen() {
     setIsAdding(true);
   }
 
+  function openAddModeMenu() {
+    setIsAddMenuOpen(true);
+    addMenuProgress.set(0);
+    addMenuProgress.set(
+      withTiming(1, {
+        duration: 280,
+        easing: Easing.out(Easing.back(1.55)),
+      })
+    );
+  }
+
+  function closeAddModeMenu() {
+    addMenuProgress.set(
+      withTiming(0, {
+        duration: 150,
+        easing: Easing.in(Easing.quad),
+      })
+    );
+    setTimeout(() => setIsAddMenuOpen(false), 150);
+  }
+
+  function selectBasicAddMode() {
+    addMenuProgress.set(0);
+    setIsAddMenuOpen(false);
+    openAddItem();
+  }
+
+  function openSmartAdd() {
+    addMenuProgress.set(0);
+    setIsAddMenuOpen(false);
+    setSmartInput('');
+    setSmartItems([]);
+    setSelectedSmartItemIds([]);
+    setSmartAnalysisSource(null);
+    setIsSmartAddOpen(true);
+  }
+
+  async function analyzeSmartInput() {
+    if (!smartInput.trim() || isSmartAnalyzing) return;
+    setIsSmartAnalyzing(true);
+    const analysis = await analyzeInventoryText(smartInput.trim());
+    setSmartItems(analysis.result);
+    setSelectedSmartItemIds(analysis.result.map((item) => item.id));
+    setSmartAnalysisSource(analysis.source);
+    setIsSmartAnalyzing(false);
+  }
+
+  function confirmSmartItems() {
+    const selectedItems = smartItems.filter((item) => selectedSmartItemIds.includes(item.id));
+    if (selectedItems.length === 0) return;
+    const today = isoDateFromToday();
+    selectedItems.forEach((item) => addInventoryItem({
+      name: item.name,
+      emoji: item.emoji,
+      quantity: item.quantity,
+      unit: item.unit,
+      storage: item.storage,
+      library: item.library,
+      purchaseDate: today,
+      expiryDate: isoDateFromToday(Math.max(1, Math.round(item.shelfDays))),
+      volumeMlPerUnit: item.library === '饮料' && item.unit === '瓶' ? 500 : undefined,
+    }));
+    setSelectedLibrary('全部');
+    setSelectedStorageFilter('全部位置');
+    setSmartAddMessage(text(
+      `已智能添加 ${selectedItems.length} 项库存。`,
+      `Smart-added ${selectedItems.length} inventory items.`
+    ));
+    setIsSmartAddOpen(false);
+    setSmartInput('');
+    setSmartItems([]);
+    setSelectedSmartItemIds([]);
+  }
+
   function applyQuickItemPreset(preset: (typeof quickItemPresets)[number]) {
     setName(preset.name);
     setEmoji(preset.emoji);
@@ -551,55 +593,26 @@ export default function InventoryScreen() {
     }
   }
 
-  function openItemDetails(item: InventoryItem, origin: RevealOrigin) {
-    const fallbackX = windowWidth / 2;
-    const fallbackY = windowHeight / 2;
-    const originX = Number.isFinite(origin.x) && origin.x > 0 ? origin.x : fallbackX;
-    const originY = Number.isFinite(origin.y) && origin.y > 0 ? origin.y : fallbackY;
-
-    detailOriginX.set(Math.max(24, Math.min(originX, windowWidth - 24)));
-    detailOriginY.set(Math.max(24, Math.min(originY, windowHeight - 24)));
-    detailRevealProgress.set(0);
+  function openItemDetails(item: InventoryItem) {
     setSelectedItem(item);
   }
 
-  function finishClosingDetail() {
-    setSelectedItem(null);
-  }
-
   function closeItemDetails() {
-    detailRevealProgress.set(
-      withTiming(
-        0,
-        {
-          duration: 250,
-          easing: Easing.bezier(0.55, 0, 1, 0.45),
-          reduceMotion: ReduceMotion.System,
-        },
-        (finished) => {
-          if (finished) runOnJS(finishClosingDetail)();
-        }
-      )
-    );
+    setSelectedItem(null);
   }
 
   function editSelectedItem() {
     if (!selectedItem) return;
-    const itemToEdit = selectedItem;
+    pendingDetailEditRef.current = selectedItem;
+    setSelectedItem(null);
+    if (Platform.OS !== 'ios') requestAnimationFrame(handleDetailDismiss);
+  }
 
-    detailRevealProgress.set(
-      withTiming(
-        0,
-        {
-          duration: 220,
-          easing: Easing.bezier(0.55, 0, 1, 0.45),
-          reduceMotion: ReduceMotion.System,
-        },
-        (finished) => {
-          if (finished) runOnJS(openEditItem)(itemToEdit);
-        }
-      )
-    );
+  function handleDetailDismiss() {
+    const itemToEdit = pendingDetailEditRef.current;
+    if (!itemToEdit) return;
+    pendingDetailEditRef.current = null;
+    openEditItem(itemToEdit);
   }
 
   function openEditItem(item: InventoryItem) {
@@ -619,8 +632,14 @@ export default function InventoryScreen() {
     setScanStatus(null);
     setIsAddingStorage(false);
     setNewStorageName('');
-    setSelectedItem(null);
     setIsAdding(true);
+  }
+
+  function handleAddItemDismiss() {
+    const celebration = pendingStorageCelebrationRef.current;
+    if (!celebration) return;
+    pendingStorageCelebrationRef.current = null;
+    setStorageCelebration(celebration);
   }
 
   function chooseLibrary(nextLibrary: InventoryLibrary) {
@@ -700,11 +719,11 @@ export default function InventoryScreen() {
       updateInventoryItem(editingItemId, itemForm);
     } else {
       addInventoryItem(itemForm);
-      setStorageCelebration({
+      pendingStorageCelebrationRef.current = {
         emoji: itemForm.emoji,
         itemName: itemForm.name,
         storage: itemForm.storage,
-      });
+      };
     }
     setSelectedLibrary(library);
     setSelectedStorageFilter('全部位置');
@@ -722,6 +741,7 @@ export default function InventoryScreen() {
     setBarcode('');
     setScanStatus(null);
     setIsAdding(false);
+    if (Platform.OS !== 'ios') requestAnimationFrame(handleAddItemDismiss);
   }
 
   return (
@@ -734,11 +754,22 @@ export default function InventoryScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={text('添加库存', 'Add inventory item')}
-            onPress={openAddItem}
+            onPress={openAddModeMenu}
             style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}>
-            <Text style={styles.addButtonIcon}>＋</Text>
+            <Animated.Text style={[styles.addButtonIcon, addButtonIconStyle]}>＋</Animated.Text>
           </Pressable>
         }>
+        {smartAddMessage ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={text('关闭智能添加提示', 'Dismiss smart-add message')}
+            onPress={() => setSmartAddMessage(null)}
+            style={styles.smartSuccessBanner}>
+            <Text style={styles.smartSuccessIcon}>✦</Text>
+            <Text style={styles.smartSuccessText}>{smartAddMessage}</Text>
+            <Text style={styles.smartSuccessClose}>×</Text>
+          </Pressable>
+        ) : null}
         <View style={styles.librarySection}>
           <View style={styles.libraryHeader}>
             <Text style={styles.libraryTitle}>{text('库存分类', 'Categories')}</Text>
@@ -1011,9 +1042,9 @@ export default function InventoryScreen() {
                   onClose={(methods) => {
                     if (openSwipeableRef.current === methods) openSwipeableRef.current = null;
                   }}
-                  onPress={(origin) => {
+                  onPress={() => {
                     openSwipeableRef.current?.close();
-                    openItemDetails(item, origin);
+                    openItemDetails(item);
                   }}
                   onDelete={() => {
                     openSwipeableRef.current = null;
@@ -1068,9 +1099,146 @@ export default function InventoryScreen() {
       </AppScreen>
 
       <Modal
+        visible={isAddMenuOpen}
+        transparent
+        animationType="none"
+        onRequestClose={closeAddModeMenu}>
+        <View style={[styles.addModeBackdrop, { paddingTop: Math.max(insets.top, 12) + 58 }]}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={closeAddModeMenu} />
+          <Animated.View style={[styles.addModeSheet, addMenuStyle]}>
+            <Text style={styles.addModeTitle}>{text('添加食材', 'Add inventory')}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={text('基础添加食材', 'Basic inventory add')}
+              onPress={selectBasicAddMode}
+              style={styles.addModeOption}>
+              <View style={styles.addModeIcon}><Text style={styles.addModeIconText}>＋</Text></View>
+              <View style={styles.addModeCopy}>
+                <Text style={styles.addModeOptionTitle}>{text('基础添加', 'Basic add')}</Text>
+                <Text style={styles.addModeOptionText}>{text('逐项填写名称、数量与保质期', 'Enter one item and its details')}</Text>
+              </View>
+              <Text style={styles.addModeChevron}>›</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={text('智能添加食材', 'Smart inventory add')}
+              onPress={openSmartAdd}
+              style={[styles.addModeOption, styles.addModeOptionAi]}>
+              <View style={[styles.addModeIcon, styles.addModeIconAi]}><Text style={styles.addModeAiIcon}>✦</Text></View>
+              <View style={styles.addModeCopy}>
+                <Text style={styles.addModeOptionTitle}>{text('智能添加', 'Smart add')}</Text>
+                <Text style={styles.addModeOptionText}>{text('输入一段话，自动识别买了什么', 'Describe your shopping in one sentence')}</Text>
+              </View>
+              <Text style={styles.addModeChevron}>›</Text>
+            </Pressable>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={isSmartAddOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setIsSmartAddOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalPage}>
+          <View style={styles.modalHeader}>
+            <Pressable accessibilityRole="button" onPress={() => setIsSmartAddOpen(false)} hitSlop={12}>
+              <Text style={styles.modalCancel}>{text('取消', 'Cancel')}</Text>
+            </Pressable>
+            <Text style={styles.modalTitle}>{text('智能添加', 'Smart add')}</Text>
+            <View style={styles.smartHeaderPlaceholder} />
+          </View>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.smartAddContent}>
+            <View style={styles.smartAddIntro}>
+              <Text style={styles.smartAddIntroIcon}>✦</Text>
+              <View style={styles.smartAddIntroCopy}>
+                <Text style={styles.smartAddIntroTitle}>{text('告诉我你买了什么', 'What did you buy?')}</Text>
+                <Text style={styles.smartAddIntroText}>
+                  {text('例如：我买了两个番茄、一盒鸡蛋、一瓶牛奶和三包薯片。', 'Example: I bought two tomatoes, a box of eggs, milk, and three bags of chips.')}
+                </Text>
+              </View>
+            </View>
+            <TextInput
+              accessibilityLabel={text('输入购买内容', 'Shopping description')}
+              value={smartInput}
+              onChangeText={setSmartInput}
+              placeholder={text('输入一段话…', 'Describe your shopping…')}
+              placeholderTextColor={Colors.light.textSecondary}
+              multiline
+              maxLength={6000}
+              style={styles.smartTextInput}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={text('开始智能分析', 'Analyze shopping description')}
+              disabled={!smartInput.trim() || isSmartAnalyzing}
+              onPress={analyzeSmartInput}
+              style={[styles.smartAnalyzeButton, (!smartInput.trim() || isSmartAnalyzing) && styles.modalSaveDisabled]}>
+              <Text style={styles.smartAnalyzeButtonText}>
+                {isSmartAnalyzing ? text('正在分析…', 'Analyzing…') : text('✦ 一键分析', '✦ Analyze')}
+              </Text>
+            </Pressable>
+
+            {smartItems.length > 0 ? (
+              <View style={styles.smartResultSection}>
+                <View style={styles.smartResultHeader}>
+                  <View>
+                    <Text style={styles.smartResultTitle}>{text('识别结果', 'Detected items')}</Text>
+                    <Text style={styles.smartResultHint}>
+                      {text(
+                        `${smartItems.length} 项 · 点击可取消选择${smartAnalysisSource === 'local' ? ' · 本地智能解析' : ''}`,
+                        `${smartItems.length} items · Tap to deselect${smartAnalysisSource === 'local' ? ' · Local parser' : ''}`
+                      )}
+                    </Text>
+                  </View>
+                  <Text style={styles.smartSelectedCount}>{selectedSmartItemIds.length}/{smartItems.length}</Text>
+                </View>
+                <View style={styles.smartItemList}>
+                  {smartItems.map((item) => {
+                    const selected = selectedSmartItemIds.includes(item.id);
+                    return (
+                      <Pressable
+                        key={item.id}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: selected }}
+                        onPress={() => setSelectedSmartItemIds((current) =>
+                          selected ? current.filter((id) => id !== item.id) : [...current, item.id]
+                        )}
+                        style={[styles.smartItemCard, selected && styles.smartItemCardSelected]}>
+                        <Text style={styles.smartItemEmoji}>{item.emoji}</Text>
+                        <View style={styles.smartItemCopy}>
+                          <Text style={styles.smartItemName}>{item.name}</Text>
+                          <Text style={styles.smartItemMeta}>{item.library} · {item.storage} · 约 {item.shelfDays} 天</Text>
+                        </View>
+                        <Text style={styles.smartItemAmount}>{formatQuantity(item.quantity)} {item.unit}</Text>
+                        <View style={[styles.smartItemCheck, selected && styles.smartItemCheckSelected]}>
+                          <Text style={styles.smartItemCheckText}>{selected ? '✓' : ''}</Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={text('确认批量添加选中的食材', 'Add selected inventory items')}
+                  disabled={selectedSmartItemIds.length === 0}
+                  onPress={confirmSmartItems}
+                  style={[styles.smartConfirmButton, selectedSmartItemIds.length === 0 && styles.modalSaveDisabled]}>
+                  <Text style={styles.smartConfirmButtonText}>
+                    {text(`确认添加 ${selectedSmartItemIds.length} 项`, `Add ${selectedSmartItemIds.length} items`)}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
         visible={isAdding}
         animationType="slide"
         presentationStyle="pageSheet"
+        onDismiss={handleAddItemDismiss}
         onRequestClose={() => setIsAdding(false)}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1479,13 +1647,12 @@ export default function InventoryScreen() {
 
       <Modal
         visible={selectedItem !== null}
-        transparent
         statusBarTranslucent
-        animationType="none"
-        presentationStyle="overFullScreen"
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onDismiss={handleDetailDismiss}
         onRequestClose={closeItemDetails}>
-        <Animated.View style={[styles.detailModalBackdrop, detailBackdropStyle]}>
-          <Animated.View style={[styles.detailModalPage, detailRevealStyle]}>
+        <View style={styles.detailModalPage}>
           <View style={styles.modalHeader}>
             <Pressable
               accessibilityRole="button"
@@ -1757,8 +1924,7 @@ export default function InventoryScreen() {
               ) : null}
             </ScrollView>
           ) : null}
-          </Animated.View>
-        </Animated.View>
+        </View>
       </Modal>
 
       <Modal
@@ -2374,7 +2540,6 @@ const styles = StyleSheet.create({
   },
   formHintIcon: { fontSize: 18 },
   formHintText: { flex: 1, color: Colors.light.primary, fontSize: 13, lineHeight: 20 },
-  detailModalBackdrop: { flex: 1, justifyContent: 'center', overflow: 'hidden' },
   detailModalPage: {
     flex: 1,
     overflow: 'hidden',
@@ -2508,4 +2673,51 @@ const styles = StyleSheet.create({
   libraryPreviewCopy: { gap: 2 },
   libraryPreviewName: { color: '#FFFFFF', fontSize: 20, fontWeight: '900' },
   libraryPreviewDetail: { color: '#FFFFFFCC', fontSize: 12, fontWeight: '600' },
+  smartSuccessBanner: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, borderRadius: 18, backgroundColor: '#F0EBFF', borderWidth: 1, borderColor: '#D7CBF2' },
+  smartSuccessIcon: { width: 29, height: 29, overflow: 'hidden', textAlign: 'center', lineHeight: 29, borderRadius: 15, color: '#FFFFFF', backgroundColor: '#735C9B', fontSize: 14, fontWeight: '900' },
+  smartSuccessText: { flex: 1, color: '#654D8B', fontSize: 12, fontWeight: '800' },
+  smartSuccessClose: { color: '#735C9B', fontSize: 20 },
+  addModeBackdrop: { flex: 1, alignItems: 'flex-end', paddingHorizontal: 14, backgroundColor: '#16221C38' },
+  addModeSheet: { width: 286, gap: 8, padding: 11, borderRadius: 22, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: '#FFFFFF', shadowColor: '#173D2F', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 24, elevation: 8 },
+  addModeHandle: { width: 42, height: 4, alignSelf: 'center', borderRadius: 2, backgroundColor: Colors.light.border, marginBottom: 3 },
+  addModeTitle: { color: Colors.light.text, fontSize: 14, fontWeight: '900', paddingHorizontal: 5, paddingTop: 2, paddingBottom: 1 },
+  addModeSubtitle: { color: Colors.light.textSecondary, fontSize: 11.5, marginBottom: 3 },
+  addModeOption: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 16, backgroundColor: Colors.light.background, borderWidth: 1, borderColor: Colors.light.border },
+  addModeOptionAi: { backgroundColor: '#F5F1FF', borderColor: '#D7CBF2' },
+  addModeIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: Colors.light.primarySoft },
+  addModeIconAi: { backgroundColor: '#735C9B' },
+  addModeIconText: { color: Colors.light.primary, fontSize: 25, fontWeight: '700' },
+  addModeAiIcon: { color: '#FFFFFF', fontSize: 20, fontWeight: '900' },
+  addModeCopy: { flex: 1, gap: 4 },
+  addModeOptionTitle: { color: Colors.light.text, fontSize: 14, fontWeight: '900' },
+  addModeOptionText: { color: Colors.light.textSecondary, fontSize: 10.5, lineHeight: 15 },
+  addModeChevron: { color: Colors.light.textSecondary, fontSize: 24 },
+  smartHeaderPlaceholder: { width: 46 },
+  smartAddContent: { width: '100%', maxWidth: 680, alignSelf: 'center', gap: 15, padding: 18, paddingBottom: 44 },
+  smartAddIntro: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 15, borderRadius: 21, backgroundColor: '#735C9B' },
+  smartAddIntroIcon: { width: 42, height: 42, overflow: 'hidden', textAlign: 'center', lineHeight: 42, borderRadius: 15, color: '#735C9B', backgroundColor: '#FFFFFF', fontSize: 18, fontWeight: '900' },
+  smartAddIntroCopy: { flex: 1, gap: 4 },
+  smartAddIntroTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
+  smartAddIntroText: { color: '#EEE8FA', fontSize: 10.5, lineHeight: 16 },
+  smartTextInput: { minHeight: 132, padding: 15, borderRadius: 20, color: Colors.light.text, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border, fontSize: 14, lineHeight: 21, textAlignVertical: 'top' },
+  smartAnalyzeButton: { minHeight: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: '#735C9B' },
+  smartAnalyzeButtonText: { color: '#FFFFFF', fontSize: 13.5, fontWeight: '900' },
+  smartResultSection: { gap: 12 },
+  smartResultHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  smartResultTitle: { color: Colors.light.text, fontSize: 17, fontWeight: '900' },
+  smartResultHint: { color: Colors.light.textSecondary, fontSize: 9.5, marginTop: 3 },
+  smartSelectedCount: { color: '#735C9B', fontSize: 12, fontWeight: '900' },
+  smartItemList: { gap: 8 },
+  smartItemCard: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 11, borderRadius: 17, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
+  smartItemCardSelected: { borderColor: '#735C9B', backgroundColor: '#F5F1FF' },
+  smartItemEmoji: { width: 38, fontSize: 27, textAlign: 'center' },
+  smartItemCopy: { flex: 1, gap: 3 },
+  smartItemName: { color: Colors.light.text, fontSize: 13, fontWeight: '900' },
+  smartItemMeta: { color: Colors.light.textSecondary, fontSize: 9.5 },
+  smartItemAmount: { color: Colors.light.text, fontSize: 11, fontWeight: '900' },
+  smartItemCheck: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderRadius: 12, borderWidth: 1, borderColor: Colors.light.border, backgroundColor: Colors.light.background },
+  smartItemCheckSelected: { backgroundColor: '#735C9B', borderColor: '#735C9B' },
+  smartItemCheckText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },
+  smartConfirmButton: { minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: Colors.light.primary },
+  smartConfirmButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
 });

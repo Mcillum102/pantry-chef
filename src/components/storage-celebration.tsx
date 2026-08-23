@@ -63,17 +63,17 @@ export function StorageCelebration({
     door.set(
       withSequence(
         withDelay(
-          260,
+          70,
           withTiming(1, {
-            duration: 360,
+            duration: 220,
             easing: Easing.out(Easing.cubic),
             reduceMotion: ReduceMotion.System,
           })
         ),
         withDelay(
-          760,
+          420,
           withTiming(0, {
-            duration: 330,
+            duration: 220,
             easing: Easing.inOut(Easing.cubic),
             reduceMotion: ReduceMotion.System,
           })
@@ -82,9 +82,9 @@ export function StorageCelebration({
     );
     item.set(
       withDelay(
-        590,
+        140,
         withTiming(1, {
-          duration: 690,
+          duration: 480,
           easing: Easing.inOut(Easing.cubic),
           reduceMotion: ReduceMotion.System,
         })
@@ -92,22 +92,22 @@ export function StorageCelebration({
     );
     sparkle.set(
       withDelay(
-        1450,
+        690,
         withSequence(
           withSpring(1, { damping: 8, stiffness: 180, reduceMotion: ReduceMotion.System }),
-          withDelay(430, withTiming(0, { duration: 230, reduceMotion: ReduceMotion.System }))
+          withDelay(260, withTiming(0, { duration: 180, reduceMotion: ReduceMotion.System }))
         )
       )
     );
     success.set(
       withDelay(
-        1510,
+        720,
         withSpring(1, { damping: 10, stiffness: 160, reduceMotion: ReduceMotion.System })
       )
     );
     reaction.set(
       withDelay(
-        1230,
+        590,
         withSequence(
           withTiming(1, { duration: 105, reduceMotion: ReduceMotion.System }),
           withTiming(-0.8, { duration: 105, reduceMotion: ReduceMotion.System }),
@@ -126,7 +126,7 @@ export function StorageCelebration({
           }
         )
       );
-    }, 2450);
+    }, 1500);
 
     return () => clearTimeout(exitTimer);
   }, [backdrop, door, item, onComplete, reaction, scene, sparkle, success]);
@@ -152,7 +152,7 @@ export function StorageCelebration({
     const endY = kind === 'cart' ? 48 : kind === 'box' ? 45 : 4;
     const startRotation = kind === 'cart' ? -18 : kind === 'cabinet' ? 14 : -12;
     return {
-      opacity: interpolate(item.value, [0, 0.72, 1], [1, 1, 0], Extrapolation.CLAMP),
+      opacity: interpolate(item.value, [0, 0.58, 0.86, 1], [1, 1, 0.12, 0], Extrapolation.CLAMP),
       transform: [
         { translateX: interpolate(item.value, [0, 1], [startX, 0], Extrapolation.CLAMP) },
         { translateY: interpolate(item.value, [0, 1], [-132, endY], Extrapolation.CLAMP) },
@@ -236,6 +236,8 @@ export function StorageCelebration({
           <Animated.Text style={[styles.sparkle, styles.sparkleTop, sparkleStyle]}>{particles[2]}</Animated.Text>
 
           <View style={styles.storageStage}>
+            <Animated.Text style={[styles.flyingItem, itemStyle]}>{emoji}</Animated.Text>
+
             {kind === 'fridge' || kind === 'freezer' ? (
               <Animated.View style={[styles.fridgeBody, kind === 'freezer' && styles.freezerBody, storageReactionStyle]}>
                 <View style={styles.fridgeInside}>
@@ -301,8 +303,6 @@ export function StorageCelebration({
                 <Animated.View style={[styles.boxFlap, boxFlapStyle]} />
               </Animated.View>
             )}
-
-            <Animated.Text style={[styles.flyingItem, itemStyle]}>{emoji}</Animated.Text>
           </View>
 
           <Animated.View style={[styles.successPill, successStyle]}>
@@ -339,6 +339,7 @@ const styles = StyleSheet.create({
   },
   storageStage: { width: 250, height: 260, alignItems: 'center', justifyContent: 'flex-end' },
   fridgeBody: {
+    zIndex: 2,
     width: 156,
     height: 224,
     borderRadius: 28,
@@ -368,13 +369,13 @@ const styles = StyleSheet.create({
   blush: { width: 12, height: 6, borderRadius: 5, backgroundColor: '#F5A7A9A8' },
   fridgeFootLeft: { position: 'absolute', left: 21, bottom: -10, width: 27, height: 12, borderRadius: 6, backgroundColor: '#B8D0C2' },
   fridgeFootRight: { position: 'absolute', right: 21, bottom: -10, width: 27, height: 12, borderRadius: 6, backgroundColor: '#B8D0C2' },
-  cabinetBody: { width: 176, height: 174, borderRadius: 23, backgroundColor: '#9B7754', borderWidth: 5, borderColor: '#F4D9B7', shadowColor: '#24170C', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.28, shadowRadius: 20, elevation: 9 },
+  cabinetBody: { zIndex: 2, width: 176, height: 174, borderRadius: 23, backgroundColor: '#9B7754', borderWidth: 5, borderColor: '#F4D9B7', shadowColor: '#24170C', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.28, shadowRadius: 20, elevation: 9 },
   cabinetInside: { position: 'absolute', inset: 10, borderRadius: 13, backgroundColor: '#60452F' },
   cabinetInsideEmoji: { position: 'absolute', top: 58, alignSelf: 'center', fontSize: 25 },
   cabinetDoor: { position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: '#D9AB7C', borderWidth: 2, borderColor: '#F2D0A8' },
   cabinetFace: { color: '#62452E', fontSize: 20, fontWeight: '900' },
   cabinetKnob: { position: 'absolute', right: 13, width: 11, height: 11, borderRadius: 6, backgroundColor: '#FFF0D4' },
-  cartWrap: { width: 170, height: 218, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 18 },
+  cartWrap: { zIndex: 2, width: 170, height: 218, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 18 },
   cartTopHandle: { position: 'absolute', right: 10, top: 4, width: 57, height: 11, borderRadius: 7, backgroundColor: '#3F765C', transform: [{ rotate: '-4deg' }] },
   cartPostLeft: { position: 'absolute', left: 17, top: 28, bottom: 22, width: 8, borderRadius: 5, backgroundColor: '#5E9474' },
   cartPostRight: { position: 'absolute', right: 17, top: 28, bottom: 22, width: 8, borderRadius: 5, backgroundColor: '#5E9474' },
@@ -389,12 +390,12 @@ const styles = StyleSheet.create({
   cartBase: { position: 'absolute', bottom: 18, width: 148, height: 9, borderRadius: 5, backgroundColor: '#3F765C' },
   cartWheelLeft: { position: 'absolute', left: 30, bottom: 0, width: 25, height: 25, borderRadius: 13, backgroundColor: '#315F49', borderWidth: 5, borderColor: '#BFE1CC' },
   cartWheelRight: { position: 'absolute', right: 30, bottom: 0, width: 25, height: 25, borderRadius: 13, backgroundColor: '#315F49', borderWidth: 5, borderColor: '#BFE1CC' },
-  boxWrap: { width: 190, height: 175, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 6 },
+  boxWrap: { zIndex: 2, width: 190, height: 175, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 6 },
   boxBody: { width: 172, height: 118, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: '#E8B56F', borderWidth: 5, borderColor: '#FFE0A8', shadowColor: '#4B2C0D', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.24, shadowRadius: 18, elevation: 8 },
   boxFace: { color: '#6E4722', fontSize: 21, fontWeight: '900' },
   boxLabel: { width: 56, height: 18, marginTop: 9, borderRadius: 7, backgroundColor: '#FFF1CC' },
   boxFlap: { position: 'absolute', top: 31, width: 176, height: 49, borderRadius: 13, backgroundColor: '#F5C783', borderWidth: 4, borderColor: '#FFE3B0' },
-  flyingItem: { position: 'absolute', top: 20, zIndex: 20, fontSize: 62, textShadowColor: '#102A2047', textShadowOffset: { width: 0, height: 8 }, textShadowRadius: 10 },
+  flyingItem: { position: 'absolute', top: 20, zIndex: 1, fontSize: 62, textShadowColor: '#102A2047', textShadowOffset: { width: 0, height: 8 }, textShadowRadius: 10 },
   sparkle: { position: 'absolute', zIndex: 30, color: '#FFF4A8', fontSize: 39, textShadowColor: '#FFF5B0', textShadowRadius: 12 },
   sparkleLeft: { left: 26, top: 44 },
   sparkleRight: { right: 22, top: 101 },

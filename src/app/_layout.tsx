@@ -1,4 +1,4 @@
-import { DefaultTheme, ThemeProvider } from 'expo-router';
+import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
