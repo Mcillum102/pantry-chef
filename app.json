@@ -4,13 +4,24 @@
     "slug": "pantry-chef",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/app-icon.png",
     "scheme": "pantrychef",
     "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "infoPlist": {
+        "CFBundleLocalizations": [
+          "zh",
+          "en"
+        ]
+      }
     },
     "android": {
+      "permissions": [
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E3F0E7",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -21,16 +32,28 @@
     },
     "web": {
       "output": "server",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon-app.png",
+      "name": "鲜食记 · Fresh Pantry",
+      "shortName": "鲜食记",
+      "lang": "zh-CN",
+      "description": "家庭共享的库存、菜谱、饮食与保质期管理工具",
+      "display": "standalone",
+      "startUrl": "/",
+      "scope": "/",
+      "orientation": "portrait-primary",
+      "themeColor": "#2F6B4F",
+      "backgroundColor": "#F7F5EF",
+      "barStyle": "default"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#2F6D50",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#F7F5EF",
+          "image": "./assets/images/logo-concept-v1.png",
+          "imageWidth": 152,
+          "resizeMode": "contain"
         }
       ],
       [
@@ -59,14 +82,20 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "允许鲜食记选择菜谱图片进行识图分析",
-          "cameraPermission": "允许鲜食记拍摄菜谱图片进行识图分析"
+          "photosPermission": "允许鲜食记选择菜谱或购物小票图片进行识图分析",
+          "cameraPermission": "允许鲜食记拍摄菜谱或购物小票进行识图分析"
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2fe97c01-c303-4927-93f1-008ba7f98489"
+      }
     }
   }
 }

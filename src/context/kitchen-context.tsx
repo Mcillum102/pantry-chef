@@ -1,7 +1,8 @@
-import { createContext, type PropsWithChildren, useContext, useMemo } from 'react';
+import { createContext, type PropsWithChildren, useContext, useEffect, useMemo } from 'react';
 
 import {
   daysUntilDate,
+  effectiveExpiryDate,
   initialInventory,
   initialStorageLocations,
   inventoryLibraries,
@@ -12,7 +13,9 @@ import {
   type InventoryTransaction,
   type CookingHistoryRecord,
   type CookingHistoryUsage,
+  type DeletedInventoryRecord,
   type Recipe,
+  type ShoppingListItem,
   type StorageLocation,
 } from '@/data/kitchen-data';
 import {
@@ -34,6 +37,8 @@ type NewInventoryItem = {
   library: InventoryLibrary;
   purchaseDate: string;
   expiryDate?: string;
+  openedAt?: string;
+  openedExpiryDate?: string;
   cookingSuggestions?: string[];
   volumeMlPerUnit?: number;
   barcode?: string;
@@ -46,6 +51,42 @@ export type RecipeMatch = {
   missing: string[];
 };
 
+export type KitchenSnapshot = {
+  inventory: InventoryItem[];
+  libraries: InventoryLibraryDefinition[];
+  storageLocations: StorageLocation[];
+  transactions: InventoryTransaction[];
+  customRecipes: Recipe[];
+  cookingHistory: CookingHistoryRecord[];
+  recipeCategoryOverrides: Record<string, string>;
+  shoppingList: ShoppingListItem[];
+  deletedInventory: DeletedInventoryRecord[];
+};
+
+export function createEmptyKitchenSnapshot(): KitchenSnapshot {
+  return {
+    inventory: [],
+    libraries: inventoryLibraries.map((library) => ({ ...library })),
+    storageLocations: [...initialStorageLocations],
+    transactions: [],
+    customRecipes: [],
+    cookingHistory: [],
+    recipeCategoryOverrides: {},
+    shoppingList: [],
+    deletedInventory: [],
+  };
+}
+
+export function createSampleKitchenSnapshot(): KitchenSnapshot {
+  return {
+    ...createEmptyKitchenSnapshot(),
+    inventory: initialInventory.map((item) => ({
+      ...item,
+      cookingSuggestions: item.cookingSuggestions ? [...item.cookingSuggestions] : undefined,
+    })),
+  };
+}
+
 type KitchenContextValue = {
   isHydrated: boolean;
   transactions: InventoryTransaction[];
@@ -54,9 +95,23 @@ type KitchenContextValue = {
   storageLocations: StorageLocation[];
   recipes: Recipe[];
   cookingHistory: CookingHistoryRecord[];
+  shoppingList: ShoppingListItem[];
+  deletedInventory: DeletedInventoryRecord[];
+  snapshot: KitchenSnapshot;
+  replaceSnapshot: (snapshot: KitchenSnapshot) => void;
+  addShoppingItem: (item: Omit<ShoppingListItem, 'id' | 'ingredientId' | 'checked' | 'createdAt'>) => void;
+  adjustShoppingItemQuantity: (id: string, delta: number) => void;
+  toggleShoppingItem: (id: string) => void;
+  deleteShoppingItem: (id: string) => void;
+  clearCheckedShoppingItems: () => void;
   addInventoryItem: (item: NewInventoryItem) => void;
   updateInventoryItem: (id: string, item: NewInventoryItem) => void;
-  deleteInventoryItem: (id: string) => void;
+  deleteInventoryItem: (
+    id: string,
+    reason?: 'deleted' | 'finished' | 'expired' | 'discarded'
+  ) => void;
+  restoreDeletedInventoryItem: (recordId: string) => void;
+  permanentlyDeleteInventoryItem: (recordId: string) => void;
   adjustInventoryQuantity: (id: string, delta: number) => void;
   addInventoryLibrary: (library: InventoryLibraryDefinition) => void;
   addStorageLocation: (location: StorageLocation) => void;
@@ -156,17 +211,18 @@ function consumeRecipeInventory(
 }
 
 export function KitchenProvider({ children }: PropsWithChildren) {
+  const emptySnapshot = useMemo(() => createEmptyKitchenSnapshot(), []);
   const [inventory, setInventory, inventoryHydrated] = usePersistentState(
     'inventory-v1',
-    initialInventory
+    emptySnapshot.inventory
   );
   const [libraries, setLibraries, librariesHydrated] = usePersistentState(
     'inventory-libraries-v1',
-    inventoryLibraries
+    emptySnapshot.libraries
   );
   const [storageLocations, setStorageLocations, locationsHydrated] = usePersistentState(
     'storage-locations-v1',
-    initialStorageLocations
+    emptySnapshot.storageLocations
   );
   const [transactions, setTransactions, transactionsHydrated] = usePersistentState<
     InventoryTransaction[]
@@ -180,6 +236,12 @@ export function KitchenProvider({ children }: PropsWithChildren) {
   >('cooking-history-v1', []);
   const [recipeCategoryOverrides, setRecipeCategoryOverrides, categoryOverridesHydrated] =
     usePersistentState<Record<string, string>>('recipe-category-overrides-v1', {});
+  const [shoppingList, setShoppingList, shoppingListHydrated] = usePersistentState<ShoppingListItem[]>(
+    'shopping-list-v1',
+    []
+  );
+  const [deletedInventory, setDeletedInventory, deletedInventoryHydrated] =
+    usePersistentState<DeletedInventoryRecord[]>('deleted-inventory-v1', []);
   const allRecipes = useMemo(
     () => [...customRecipes, ...builtInRecipes].map((recipe) => ({
       ...recipe,
@@ -187,6 +249,21 @@ export function KitchenProvider({ children }: PropsWithChildren) {
     })),
     [customRecipes, recipeCategoryOverrides]
   );
+
+  useEffect(() => {
+    if (!inventoryHydrated) return;
+    setInventory((current) => {
+      let changed = false;
+      const next = current.map((item) => {
+        const expiry = effectiveExpiryDate(item);
+        const daysLeft = expiry ? daysUntilDate(expiry) : 36_500;
+        if (daysLeft === item.daysLeft) return item;
+        changed = true;
+        return { ...item, daysLeft };
+      });
+      return changed ? next : current;
+    });
+  }, [inventoryHydrated, setInventory]);
 
   const value = useMemo<KitchenContextValue>(
     () => ({
@@ -197,13 +274,78 @@ export function KitchenProvider({ children }: PropsWithChildren) {
         transactionsHydrated &&
         recipesHydrated &&
         cookingHistoryHydrated &&
-        categoryOverridesHydrated,
+        categoryOverridesHydrated &&
+        shoppingListHydrated &&
+        deletedInventoryHydrated,
       transactions,
       inventory,
       libraries,
       storageLocations,
       recipes: allRecipes,
       cookingHistory,
+      shoppingList,
+      deletedInventory,
+      snapshot: {
+        inventory,
+        libraries,
+        storageLocations,
+        transactions,
+        customRecipes,
+        cookingHistory,
+        recipeCategoryOverrides,
+        shoppingList,
+        deletedInventory,
+      },
+      replaceSnapshot: (snapshot) => {
+        setInventory(snapshot.inventory);
+        setLibraries(snapshot.libraries);
+        setStorageLocations(snapshot.storageLocations);
+        setTransactions(snapshot.transactions);
+        setCustomRecipes(snapshot.customRecipes);
+        setCookingHistory(snapshot.cookingHistory);
+        setRecipeCategoryOverrides(snapshot.recipeCategoryOverrides);
+        setShoppingList(snapshot.shoppingList ?? []);
+        setDeletedInventory(snapshot.deletedInventory ?? []);
+      },
+      addShoppingItem: (item) => {
+        const ingredientId = canonicalIngredientId(item.name);
+        setShoppingList((current) => {
+          const existing = current.find(
+            (entry) => !entry.checked && entry.ingredientId === ingredientId && entry.unit === item.unit
+          );
+          if (existing) {
+            return current.map((entry) => entry.id === existing.id
+              ? { ...entry, quantity: entry.quantity + item.quantity }
+              : entry
+            );
+          }
+          return [{
+            ...item,
+            id: `shopping-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            ingredientId,
+            checked: false,
+            createdAt: new Date().toISOString(),
+          }, ...current];
+        });
+      },
+      adjustShoppingItemQuantity: (id, delta) => {
+        setShoppingList((current) => current.map((entry) => entry.id === id
+          ? { ...entry, quantity: Math.max(0.1, entry.quantity + delta) }
+          : entry
+        ));
+      },
+      toggleShoppingItem: (id) => {
+        setShoppingList((current) => current.map((entry) => entry.id === id
+          ? { ...entry, checked: !entry.checked }
+          : entry
+        ));
+      },
+      deleteShoppingItem: (id) => {
+        setShoppingList((current) => current.filter((entry) => entry.id !== id));
+      },
+      clearCheckedShoppingItems: () => {
+        setShoppingList((current) => current.filter((entry) => !entry.checked));
+      },
       addInventoryItem: (item) => {
         const itemId = `custom-${Date.now()}`;
         setInventory((current) => [
@@ -213,7 +355,9 @@ export function KitchenProvider({ children }: PropsWithChildren) {
             batchId: itemId,
             ingredientId: canonicalIngredientId(item.name),
             category: '其他',
-            daysLeft: item.expiryDate ? daysUntilDate(item.expiryDate) : 36_500,
+            daysLeft: (item.openedExpiryDate ?? item.expiryDate)
+              ? daysUntilDate(item.openedExpiryDate ?? item.expiryDate!)
+              : 36_500,
           },
           ...current,
         ]);
@@ -239,7 +383,9 @@ export function KitchenProvider({ children }: PropsWithChildren) {
               ? {
                   ...existing,
                   ...item,
-                  daysLeft: item.expiryDate ? daysUntilDate(item.expiryDate) : 36_500,
+                  daysLeft: (item.openedExpiryDate ?? item.expiryDate)
+                    ? daysUntilDate(item.openedExpiryDate ?? item.expiryDate!)
+                    : 36_500,
                 }
               : existing
           )
@@ -260,10 +406,16 @@ export function KitchenProvider({ children }: PropsWithChildren) {
           ]);
         }
       },
-      deleteInventoryItem: (id) => {
+      deleteInventoryItem: (id, reason = 'deleted') => {
         const deletedItem = inventory.find((item) => item.id === id);
         setInventory((current) => current.filter((item) => item.id !== id));
         if (deletedItem) {
+          setDeletedInventory((current) => [{
+            id: `deleted-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            item: deletedItem,
+            reason,
+            deletedAt: new Date().toISOString(),
+          }, ...current].slice(0, 100));
           setTransactions((current) => [
             {
               id: `transaction-${Date.now()}`,
@@ -272,12 +424,34 @@ export function KitchenProvider({ children }: PropsWithChildren) {
               itemName: deletedItem.name,
               amount: -deletedItem.quantity,
               unit: deletedItem.unit,
-              reason: 'deleted',
+              reason,
               createdAt: new Date().toISOString(),
             },
             ...current,
           ]);
         }
+      },
+      restoreDeletedInventoryItem: (recordId) => {
+        const record = deletedInventory.find((entry) => entry.id === recordId);
+        if (!record) return;
+        const restoredId = inventory.some((item) => item.id === record.item.id)
+          ? `${record.item.id}-restored-${Date.now()}`
+          : record.item.id;
+        setInventory((current) => [{ ...record.item, id: restoredId, batchId: restoredId }, ...current]);
+        setDeletedInventory((current) => current.filter((entry) => entry.id !== recordId));
+        setTransactions((current) => [{
+          id: `transaction-restore-delete-${Date.now()}`,
+          itemId: restoredId,
+          ingredientId: inventoryIngredientId(record.item),
+          itemName: record.item.name,
+          amount: record.item.quantity,
+          unit: record.item.unit,
+          reason: 'restored' as const,
+          createdAt: new Date().toISOString(),
+        }, ...current]);
+      },
+      permanentlyDeleteInventoryItem: (recordId) => {
+        setDeletedInventory((current) => current.filter((entry) => entry.id !== recordId));
       },
       adjustInventoryQuantity: (id, delta) => {
         const target = inventory.find((item) => item.id === id);
@@ -425,7 +599,10 @@ export function KitchenProvider({ children }: PropsWithChildren) {
       allRecipes,
       cookingHistory,
       cookingHistoryHydrated,
+      deletedInventory,
+      deletedInventoryHydrated,
       categoryOverridesHydrated,
+      customRecipes,
       libraries,
       librariesHydrated,
       locationsHydrated,
@@ -434,11 +611,16 @@ export function KitchenProvider({ children }: PropsWithChildren) {
       setStorageLocations,
       setCustomRecipes,
       setCookingHistory,
+      setDeletedInventory,
       setRecipeCategoryOverrides,
       setTransactions,
       transactions,
       transactionsHydrated,
       recipesHydrated,
+      recipeCategoryOverrides,
+      setShoppingList,
+      shoppingList,
+      shoppingListHydrated,
       storageLocations,
     ]
   );

@@ -4,6 +4,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -29,18 +30,22 @@ import { AppScreen, SectionHeader } from '@/components/app-screen';
 import { RecipeCompletionCelebration } from '@/components/recipe-completion-celebration';
 import { RecipeShelfCelebration } from '@/components/recipe-shelf-celebration';
 import { Colors, Spacing } from '@/constants/theme';
+import { useCookingSession } from '@/context/cooking-session-context';
 import { localDateKey, type MealType, useHealth } from '@/context/health-context';
 import { useKitchen } from '@/context/kitchen-context';
 import { useLanguage } from '@/context/language-context';
+import { useReminders } from '@/context/reminder-context';
 import { formatAmount, localizeContent } from '@/data/content-translations';
 import type { ImportedRecipe } from '@/data/ai-import';
 import { type CookingHistoryRecord, type Recipe } from '@/data/kitchen-data';
 import { analyzeRecipeImage, analyzeRecipeLink } from '@/services/ai-import';
 import { organizeRecipesWithAI } from '@/services/recipe-ai';
+import { scheduleCookingTimerNotification } from '@/services/app-notifications';
 import {
   amountFromBaseUnit,
   amountInBaseUnit,
   availableIngredientAmount,
+  canonicalIngredientId,
 } from '@/data/inventory-utils';
 
 const recipeLibraries = [
@@ -108,6 +113,12 @@ const mealOptions: { key: MealType; zh: string; en: string; emoji: string }[] = 
   { key: 'dinner', zh: '晚餐', en: 'Dinner', emoji: '🌙' },
   { key: 'snack', zh: '加餐', en: 'Snack', emoji: '🍎' },
 ];
+const mealTimePresets: Record<MealType, string[]> = {
+  breakfast: ['07:30', '08:00', '09:00'],
+  lunch: ['12:00', '12:30', '13:00'],
+  dinner: ['18:00', '19:00', '20:00'],
+  snack: ['10:30', '15:30', '21:00'],
+};
 
 function currentMealType(): MealType {
   const hour = new Date().getHours();
@@ -118,11 +129,12 @@ function currentMealType(): MealType {
 }
 
 function currentTime() {
-  return new Date().toLocaleTimeString('en-CA', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+function isValidMealTime(value: string) {
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
 function removeLastListedFood(value: string, food: string, separator: string) {
@@ -143,6 +155,8 @@ export default function RecipesScreen() {
     inventory,
     recipes,
     cookingHistory,
+    shoppingList,
+    addShoppingItem,
     addRecipe,
     deleteRecipe,
     updateRecipeCategories,
@@ -151,7 +165,16 @@ export default function RecipesScreen() {
     undoCookedRecipe,
   } = useKitchen();
   const { mealRecords, setMealRecords } = useHealth();
+  const {
+    session: cookingSession,
+    resumeRequestId,
+    startCookingSession,
+    updateCookingSession,
+    minimizeCookingSession,
+    clearCookingSession,
+  } = useCookingSession();
   const { language, text } = useLanguage();
+  const { preferences: reminderPreferences } = useReminders();
   const insets = useSafeAreaInsets();
   const [majorLibrary, setMajorLibrary] = useState<MajorRecipeLibrary>('recipes');
   const [search, setSearch] = useState('');
@@ -162,6 +185,9 @@ export default function RecipesScreen() {
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [servings, setServings] = useState(2);
   const [mealType, setMealType] = useState<MealType>(currentMealType());
+  const [mealTime, setMealTime] = useState(currentTime());
+  const [isCompletionLogOpen, setIsCompletionLogOpen] = useState(false);
+  const [isCloseCookingConfirmOpen, setIsCloseCookingConfirmOpen] = useState(false);
   const [isCooking, setIsCooking] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
@@ -199,6 +225,20 @@ export default function RecipesScreen() {
   const detailReveal = useSharedValue(0);
   const pageTurn = useSharedValue(1);
   const pageDirection = useSharedValue(1);
+  const handledResumeRequestRef = useRef(0);
+  const requestCloseRecipeRef = useRef<() => void>(() => undefined);
+  const recipeEdgePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx > 72 || gestureState.vx > 0.55) {
+          requestCloseRecipeRef.current();
+        }
+      },
+      onPanResponderTerminationRequest: () => false,
+    })
+  ).current;
 
   const detailRevealStyle = useAnimatedStyle(() => ({
     opacity: interpolate(detailReveal.value, [0, 0.35, 1], [0, 0.82, 1], Extrapolation.CLAMP),
@@ -248,13 +288,82 @@ export default function RecipesScreen() {
         clearInterval(interval);
         setTimerDeadline(null);
         setTimerStepIndex(null);
-        setCompletedTimerSteps((current) =>
-          current.includes(activeStep) ? current : [...current, activeStep]
-        );
+        setCompletedTimerSteps((current) => {
+          const completed = current.includes(activeStep) ? current : [...current, activeStep];
+          updateCookingSession({
+            timerDeadline: null,
+            timerStepIndex: null,
+            completedTimerSteps: completed,
+          });
+          return completed;
+        });
       }
     }, 250);
     return () => clearInterval(interval);
-  }, [timerDeadline, timerStepIndex]);
+  }, [timerDeadline, timerStepIndex, updateCookingSession]);
+
+  useEffect(() => {
+    if (
+      resumeRequestId === 0 ||
+      handledResumeRequestRef.current === resumeRequestId ||
+      !cookingSession
+    ) return;
+    const recipe = recipes.find((item) => item.id === cookingSession.recipeId);
+    if (!recipe) return;
+    handledResumeRequestRef.current = resumeRequestId;
+
+    const timerExpired =
+      cookingSession.timerDeadline !== null && cookingSession.timerDeadline <= Date.now();
+    const completedTimerSteps = timerExpired && cookingSession.timerStepIndex !== null
+      ? Array.from(new Set([
+          ...cookingSession.completedTimerSteps,
+          cookingSession.timerStepIndex,
+        ]))
+      : cookingSession.completedTimerSteps;
+
+    detailReveal.set(0);
+    pageTurn.set(1);
+    pageDirection.set(1);
+    setSelectedRecipe(recipe);
+    setServings(cookingSession.servings);
+    setMealType(cookingSession.mealType);
+    setMealTime(cookingSession.mealTime);
+    setIsCooking(true);
+    setIsCompletionLogOpen(cookingSession.stage === 'meal');
+    setIsCloseCookingConfirmOpen(false);
+    setStepIndex(cookingSession.stepIndex);
+    setTimerDeadline(timerExpired ? null : cookingSession.timerDeadline);
+    setTimerStepIndex(timerExpired ? null : cookingSession.timerStepIndex);
+    setTimerRemaining(
+      timerExpired || cookingSession.timerDeadline === null
+        ? 0
+        : Math.max(0, Math.ceil((cookingSession.timerDeadline - Date.now()) / 1000))
+    );
+    setCompletedTimerSteps(completedTimerSteps);
+    setIsPageTurning(false);
+    if (timerExpired) {
+      updateCookingSession({
+        timerDeadline: null,
+        timerStepIndex: null,
+        completedTimerSteps,
+      });
+    }
+    detailReveal.set(
+      withTiming(1, {
+        duration: 360,
+        easing: Easing.out(Easing.cubic),
+        reduceMotion: ReduceMotion.System,
+      })
+    );
+  }, [
+    cookingSession,
+    detailReveal,
+    pageDirection,
+    pageTurn,
+    recipes,
+    resumeRequestId,
+    updateCookingSession,
+  ]);
 
   const libraryRecipes = useMemo(
     () => recipes.filter((recipe) => (
@@ -356,6 +465,9 @@ export default function RecipesScreen() {
     setSelectedRecipe(recipe);
     setServings(recipe.servings);
     setMealType(currentMealType());
+    setMealTime(currentTime());
+    setIsCompletionLogOpen(false);
+    setIsCloseCookingConfirmOpen(false);
     setIsCooking(false);
     setStepIndex(0);
     setTimerDeadline(null);
@@ -377,6 +489,8 @@ export default function RecipesScreen() {
 
   function finishClosingRecipe() {
     setSelectedRecipe(null);
+    setIsCompletionLogOpen(false);
+    setIsCloseCookingConfirmOpen(false);
     setIsCooking(false);
     setStepIndex(0);
     setTimerDeadline(null);
@@ -436,12 +550,31 @@ export default function RecipesScreen() {
 
   function commitStepPage(nextStep: number, incomingDirection: number) {
     setStepIndex(nextStep);
+    updateCookingSession({ stepIndex: nextStep });
     revealTurnedPage(incomingDirection);
   }
 
   function commitCookingPage(incomingDirection: number) {
     setStepIndex(0);
     setIsCooking(true);
+    if (selectedRecipe) {
+      startCookingSession({
+        recipeId: selectedRecipe.id,
+        recipeName: selectedRecipe.name,
+        recipeNameEn: localizeContent(selectedRecipe.name, 'en'),
+        recipeEmoji: selectedRecipe.emoji,
+        servings,
+        stepIndex: 0,
+        totalSteps: selectedRecipe.steps.length,
+        stage: 'cooking',
+        mealType,
+        mealTime,
+        timerDeadline: null,
+        timerStepIndex: null,
+        completedTimerSteps: [],
+        isMinimized: false,
+      });
+    }
     revealTurnedPage(incomingDirection);
   }
 
@@ -695,21 +828,113 @@ export default function RecipesScreen() {
 
   function startStepTimer(index: number) {
     const duration = selectedRecipe?.stepTimers?.[index] ?? 0;
-    if (duration <= 0) return;
+    if (!selectedRecipe || duration <= 0) return;
+    const deadline = Date.now() + duration * 1000;
     setCompletedTimerSteps((current) => current.filter((item) => item !== index));
     setTimerStepIndex(index);
     setTimerRemaining(duration);
-    setTimerDeadline(Date.now() + duration * 1000);
+    setTimerDeadline(deadline);
+    updateCookingSession({
+      timerDeadline: deadline,
+      timerStepIndex: index,
+      completedTimerSteps: completedTimerSteps.filter((item) => item !== index),
+    });
+    if (reminderPreferences.masterEnabled && reminderPreferences.cookingEnabled) {
+      void scheduleCookingTimerNotification({
+        deadline,
+        recipeName: selectedRecipe.name,
+        recipeNameEn: localizeContent(selectedRecipe.name, 'en'),
+        recipeEmoji: selectedRecipe.emoji,
+        stepNumber: index + 1,
+        stepText: localizeContent(selectedRecipe.steps[index], language),
+        language,
+      });
+    }
   }
 
   function stopTimer() {
     setTimerDeadline(null);
     setTimerStepIndex(null);
     setTimerRemaining(0);
+    updateCookingSession({ timerDeadline: null, timerStepIndex: null });
+  }
+
+  function commitCompletionLogPage(open: boolean, incomingDirection: number) {
+    setIsCompletionLogOpen(open);
+    updateCookingSession({
+      stage: open ? 'meal' : 'cooking',
+      mealType,
+      mealTime,
+    });
+    revealTurnedPage(incomingDirection);
+  }
+
+  function turnCompletionLogPage(open: boolean) {
+    if (isPageTurning || isCompletionLogOpen === open) return;
+    if (open) {
+      setMealType(currentMealType());
+      setMealTime(currentTime());
+    }
+    setIsPageTurning(true);
+    pageDirection.set(open ? -1 : 1);
+    pageTurn.set(
+      withTiming(
+        0,
+        {
+          duration: 230,
+          easing: Easing.in(Easing.cubic),
+          reduceMotion: ReduceMotion.System,
+        },
+        (finished) => {
+          if (finished) runOnJS(commitCompletionLogPage)(open, open ? 1 : -1);
+        }
+      )
+    );
+  }
+
+  function requestCloseRecipe() {
+    if (isCooking || isCompletionLogOpen) {
+      setIsCloseCookingConfirmOpen(true);
+      return;
+    }
+    closeRecipe();
+  }
+
+  function minimizeActiveCooking() {
+    if (!selectedRecipe || (!isCooking && !isCompletionLogOpen)) return;
+    minimizeCookingSession({
+      recipeId: selectedRecipe.id,
+      recipeName: selectedRecipe.name,
+      recipeNameEn: localizeContent(selectedRecipe.name, 'en'),
+      recipeEmoji: selectedRecipe.emoji,
+      servings,
+      stepIndex,
+      totalSteps: selectedRecipe.steps.length,
+      stage: isCompletionLogOpen ? 'meal' : 'cooking',
+      mealType,
+      mealTime,
+      timerDeadline,
+      timerStepIndex,
+      completedTimerSteps,
+    });
+    setIsCloseCookingConfirmOpen(false);
+    closeRecipe();
+  }
+
+  function endCookingAndClose() {
+    clearCookingSession();
+    setIsCloseCookingConfirmOpen(false);
+    closeRecipe();
+  }
+
+  requestCloseRecipeRef.current = requestCloseRecipe;
+
+  function openCompletionLog() {
+    turnCompletionLogPage(true);
   }
 
   function finishCooking() {
-    if (!selectedRecipe || selectedMatch?.percentage !== 100) return;
+    if (!selectedRecipe || selectedMatch?.percentage !== 100 || !isValidMealTime(mealTime)) return;
     const recipe = selectedRecipe;
     const multiplier = servings / recipe.servings;
     const today = localDateKey();
@@ -717,6 +942,7 @@ export default function RecipesScreen() {
     const historyId = `cooking-history-${Date.now()}`;
     const mealFoods = recipe.name;
     const mealFoodsEn = localizeContent(recipe.name, 'en');
+    const selectedMeal = mealOptions.find((option) => option.key === mealType) ?? mealOptions[2];
     const carbsGrams = Math.round(recipe.carbsPerServing * servings);
     const existingMeal =
       mealType === 'snack'
@@ -743,6 +969,7 @@ export default function RecipesScreen() {
           record.id === existingMeal.id
             ? {
                 ...record,
+                time: mealTime,
                 foods: `${record.foods}、${mealFoods}`,
                 foodsEn: `${record.foodsEn ?? record.foods}, ${mealFoodsEn}`,
                 carbsGrams: record.carbsGrams + carbsGrams,
@@ -758,7 +985,7 @@ export default function RecipesScreen() {
           id: mealRecordId,
           date: today,
           type: mealType,
-          time: currentTime(),
+          time: mealTime,
           foods: mealFoods,
           foodsEn: mealFoodsEn,
           note: '由菜谱完成。',
@@ -771,10 +998,12 @@ export default function RecipesScreen() {
 
     setCompletionMessage(
       text(
-        `已完成“${localizedName}”，库存和今日饮食记录已同步更新。`,
-        `Finished “${localizedName}”. Inventory and today's meal record are updated.`
+        `已完成“${localizedName}”，并记录到 ${mealTime} 的${selectedMeal.zh}。`,
+        `Finished “${localizedName}” and logged it as ${selectedMeal.en.toLowerCase()} at ${mealTime}.`
       )
     );
+    setIsCompletionLogOpen(false);
+    clearCookingSession();
     pendingRecipeCompletionRef.current = recipe;
     closeRecipe();
   }
@@ -1376,15 +1605,26 @@ export default function RecipesScreen() {
         animationType="none"
         presentationStyle="fullScreen"
         onDismiss={handleRecipeDetailDismiss}
-        onRequestClose={closeRecipe}>
+        onRequestClose={requestCloseRecipe}>
         {selectedRecipe ? (
           <Animated.View style={[styles.detailPage, detailRevealStyle]}>
+            <View
+              testID="recipe-edge-swipe-zone"
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              style={styles.recipeEdgeSwipeZone}
+              {...recipeEdgePanResponder.panHandlers}
+            />
             <View style={[styles.detailHeader, { paddingTop: Math.max(insets.top, 12) }]}> 
-              <Pressable accessibilityRole="button" onPress={closeRecipe} style={styles.headerButton}>
+              <Pressable accessibilityRole="button" onPress={requestCloseRecipe} style={styles.headerButton}>
                 <Text style={styles.headerButtonText}>×</Text>
               </Pressable>
               <Text style={styles.detailHeaderTitle}>
-                {isCooking ? text('烹饪模式', 'Cooking mode') : text('菜谱详情', 'Recipe details')}
+                {isCompletionLogOpen
+                  ? text('记录用餐', 'Log meal')
+                  : isCooking
+                    ? text('烹饪模式', 'Cooking mode')
+                    : text('菜谱详情', 'Recipe details')}
               </Text>
               {selectedRecipe.id.startsWith('custom-recipe-') && !isCooking ? (
                 <Pressable
@@ -1407,6 +1647,8 @@ export default function RecipesScreen() {
             </View>
 
             <ScrollView
+              automaticallyAdjustKeyboardInsets
+              keyboardShouldPersistTaps="handled"
               contentContainerStyle={[styles.detailContent, { paddingBottom: Math.max(insets.bottom, 20) + 118 }]}
               showsVerticalScrollIndicator={false}>
               <Animated.View style={[styles.recipePageSheet, recipePageStyle]}>
@@ -1470,6 +1712,13 @@ export default function RecipesScreen() {
                         const neededBase = amountInBaseUnit(amount, ingredient.unit).amount;
                         const available = amountFromBaseUnit(availableBase, ingredient.unit);
                         const enough = availableBase >= neededBase;
+                        const missingAmount = amountFromBaseUnit(
+                          Math.max(0, neededBase - availableBase),
+                          ingredient.unit
+                        );
+                        const isOnShoppingList = shoppingList.some(
+                          (entry) => !entry.checked && entry.ingredientId === canonicalIngredientId(ingredient.name)
+                        );
                         return (
                           <View key={ingredient.name} style={styles.ingredientRow}>
                             <View style={[styles.checkCircle, enough && styles.checkCircleReady]}>
@@ -1483,7 +1732,29 @@ export default function RecipesScreen() {
                                   : text('库存不足', 'Not enough in stock')}
                               </Text>
                             </View>
-                            <Text style={styles.ingredientAmount}>{formatAmount(amount, ingredient.unit, language)}</Text>
+                            <View style={styles.ingredientAmountColumn}>
+                              <Text style={styles.ingredientAmount}>{formatAmount(amount, ingredient.unit, language)}</Text>
+                              {!enough ? (
+                                <Pressable
+                                  accessibilityRole="button"
+                                  accessibilityLabel={text(`将${ingredient.name}加入购物清单`, `Add ${localizeContent(ingredient.name, 'en')} to shopping list`)}
+                                  disabled={isOnShoppingList}
+                                  onPress={() => addShoppingItem({
+                                    name: ingredient.name,
+                                    nameEn: localizeContent(ingredient.name, 'en'),
+                                    emoji: '🛒',
+                                    quantity: missingAmount,
+                                    unit: ingredient.unit,
+                                    sourceRecipeId: selectedRecipe.id,
+                                    sourceRecipeName: selectedRecipe.name,
+                                  })}
+                                  style={[styles.addIngredientToList, isOnShoppingList && styles.addIngredientToListAdded]}>
+                                  <Text style={[styles.addIngredientToListText, isOnShoppingList && styles.addIngredientToListTextAdded]}>
+                                    {isOnShoppingList ? text('已在清单', 'On list') : text('＋ 清单', '+ List')}
+                                  </Text>
+                                </Pressable>
+                              ) : null}
+                            </View>
                           </View>
                         );
                       })}
@@ -1519,6 +1790,119 @@ export default function RecipesScreen() {
                     </View>
                   </View>
                 </>
+              ) : isCompletionLogOpen ? (
+                <View testID="completion-log-page" style={styles.completionLogPage}>
+                  <View style={styles.completionLogHero}>
+                    <View style={styles.completionLogEmojiWrap}>
+                      <Text style={styles.completionLogEmoji}>🍽️</Text>
+                    </View>
+                    <View style={styles.completionLogHeroCopy}>
+                      <Text style={styles.completionLogTitle}>
+                        {text('完成啦，记录到哪一餐？', 'All done. Log this meal')}
+                      </Text>
+                      <Text style={styles.completionLogSubtitle}>
+                        {text(
+                          '选择实际用餐的餐次和时间，下一步会扣减库存并更新健康报告。',
+                          'Choose the meal and actual eating time. The next step updates stock and your health report.'
+                        )}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.completionLogSection}>
+                    <Text style={styles.completionLogSectionTitle}>{text('记录到', 'Meal')}</Text>
+                    <View style={styles.mealOptions}>
+                      {mealOptions.map((option) => (
+                        <Pressable
+                          key={option.key}
+                          accessibilityRole="radio"
+                          accessibilityLabel={text(option.zh, option.en)}
+                          accessibilityState={{ checked: mealType === option.key }}
+                          onPress={() => setMealType(option.key)}
+                          style={[
+                            styles.mealOption,
+                            mealType === option.key && styles.mealOptionSelected,
+                          ]}>
+                          <Text style={styles.mealOptionEmoji}>{option.emoji}</Text>
+                          <Text
+                            style={[
+                              styles.mealOptionText,
+                              mealType === option.key && styles.mealOptionTextSelected,
+                            ]}>
+                            {text(option.zh, option.en)}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View style={styles.completionLogSection}>
+                    <View style={styles.completionTimeHeader}>
+                      <Text style={styles.completionLogSectionTitle}>{text('吃饭时间', 'Eating time')}</Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => setMealTime(currentTime())}
+                        style={styles.nowTimeButton}>
+                        <Text style={styles.nowTimeButtonText}>{text('设为现在', 'Use now')}</Text>
+                      </Pressable>
+                    </View>
+                    <View style={styles.mealTimePresets}>
+                      {mealTimePresets[mealType].map((time) => (
+                        <Pressable
+                          key={`${mealType}-${time}`}
+                          accessibilityRole="radio"
+                          accessibilityLabel={text(`用餐时间 ${time}`, `Eating time ${time}`)}
+                          accessibilityState={{ checked: mealTime === time }}
+                          onPress={() => setMealTime(time)}
+                          style={[
+                            styles.mealTimePreset,
+                            mealTime === time && styles.mealTimePresetSelected,
+                          ]}>
+                          <Text
+                            style={[
+                              styles.mealTimePresetText,
+                              mealTime === time && styles.mealTimePresetTextSelected,
+                            ]}>
+                            {time}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                    <View
+                      style={[
+                        styles.mealTimeInputWrap,
+                        !isValidMealTime(mealTime) && styles.mealTimeInputWrapError,
+                      ]}>
+                      <Text style={styles.mealTimeInputIcon}>🕐</Text>
+                      <TextInput
+                        accessibilityLabel={text('自定义吃饭时间', 'Custom eating time')}
+                        value={mealTime}
+                        onChangeText={setMealTime}
+                        placeholder="HH:MM"
+                        placeholderTextColor={Colors.light.textSecondary}
+                        keyboardType="numbers-and-punctuation"
+                        maxLength={5}
+                        selectTextOnFocus
+                        style={styles.mealTimeInput}
+                      />
+                    </View>
+                    {!isValidMealTime(mealTime) ? (
+                      <Text style={styles.mealTimeError}>
+                        {text('请输入 00:00–23:59 的时间。', 'Enter a time from 00:00 to 23:59.')}
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  <View style={styles.completionInlineHint}>
+                    <Text style={styles.completionInlineHintIcon}>✓</Text>
+                    <Text style={styles.completionInlineHintText}>
+                      {text(
+                        '确认后才会正式完成菜谱；返回上一步不会扣减任何库存。',
+                        'The recipe is completed only after confirmation. Going back will not change stock.'
+                      )}
+                    </Text>
+                  </View>
+                </View>
               ) : (
                 <View style={styles.cookingCard}>
                   <View style={styles.cookingProgressRow}>
@@ -1594,6 +1978,26 @@ export default function RecipesScreen() {
                       )}
                     </View>
                   ) : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={text(
+                      timerDeadline !== null ? '最小化烹饪并保留倒计时' : '最小化烹饪并保留进度',
+                      timerDeadline !== null ? 'Minimize cooking and keep the timer' : 'Minimize cooking and keep progress'
+                    )}
+                    onPress={minimizeActiveCooking}
+                    style={styles.minimizeCookingButton}>
+                    <Text style={styles.minimizeCookingButtonIcon}>↘</Text>
+                    <View style={styles.minimizeCookingButtonCopy}>
+                      <Text style={styles.minimizeCookingButtonTitle}>
+                        {text('先去看看别的页面', 'Browse another screen')}
+                      </Text>
+                      <Text style={styles.minimizeCookingButtonText}>
+                        {timerDeadline !== null
+                          ? text('倒计时会缩成悬浮窗，点击即可继续烹饪。', 'The timer becomes a floating window. Tap it to resume.')
+                          : text('当前步骤会保留在悬浮窗，点击即可继续烹饪。', 'Your current step stays in a floating window. Tap it to resume.')}
+                      </Text>
+                    </View>
+                  </Pressable>
                   <View style={styles.timerHint}>
                     <Text style={styles.timerHintIcon}>👩‍🍳</Text>
                     <Text style={styles.timerHintText}>{text(selectedRecipe.tip, selectedRecipe.tipEn)}</Text>
@@ -1601,29 +2005,32 @@ export default function RecipesScreen() {
                 </View>
               )}
 
-              <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>{text('记录到哪一餐', 'Log this as')}</Text>
-                <View style={styles.mealOptions}>
-                  {mealOptions.map((option) => (
-                    <Pressable
-                      key={option.key}
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: mealType === option.key }}
-                      onPress={() => setMealType(option.key)}
-                      style={[styles.mealOption, mealType === option.key && styles.mealOptionSelected]}>
-                      <Text style={styles.mealOptionEmoji}>{option.emoji}</Text>
-                      <Text style={[styles.mealOptionText, mealType === option.key && styles.mealOptionTextSelected]}>
-                        {text(option.zh, option.en)}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
               </Animated.View>
             </ScrollView>
 
             <View style={[styles.bottomActionBar, { paddingBottom: Math.max(insets.bottom, 12) }]}> 
-              {isCooking ? (
+              {isCompletionLogOpen ? (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={isPageTurning}
+                    onPress={() => turnCompletionLogPage(false)}
+                    style={[styles.secondaryAction, isPageTurning && styles.disabled]}>
+                    <Text style={styles.secondaryActionText}>{text('返回上一步', 'Back')}</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={text('确认完成并更新库存', 'Confirm completion and update stock')}
+                    disabled={!isValidMealTime(mealTime) || isPageTurning}
+                    onPress={finishCooking}
+                    style={[
+                      styles.primaryAction,
+                      (!isValidMealTime(mealTime) || isPageTurning) && styles.disabled,
+                    ]}>
+                    <Text style={styles.primaryActionText}>{text('确认完成', 'Confirm')}</Text>
+                  </Pressable>
+                </>
+              ) : isCooking ? (
                 <>
                   <Pressable
                     accessibilityRole="button"
@@ -1639,14 +2046,14 @@ export default function RecipesScreen() {
                       if (stepIndex < selectedRecipe.steps.length - 1) {
                         turnToStep(stepIndex + 1);
                       } else {
-                        finishCooking();
+                        openCompletionLog();
                       }
                     }}
                     style={[styles.primaryAction, isPageTurning && styles.disabled]}>
                     <Text style={styles.primaryActionText}>
                       {stepIndex < selectedRecipe.steps.length - 1
                         ? text('下一步', 'Next step')
-                        : text('完成并扣减库存', 'Finish & update stock')}
+                        : text('完成烹饪', 'Finish cooking')}
                     </Text>
                   </Pressable>
                 </>
@@ -1665,6 +2072,53 @@ export default function RecipesScreen() {
                 </Pressable>
               )}
             </View>
+
+            {isCloseCookingConfirmOpen ? (
+              <View style={[StyleSheet.absoluteFillObject, styles.cookingCloseBackdrop]}>
+                <View accessibilityViewIsModal style={styles.cookingCloseDialog}>
+                  <View style={styles.cookingCloseIcon}>
+                    <Text style={styles.cookingCloseIconText}>👩‍🍳</Text>
+                  </View>
+                  <Text style={styles.cookingCloseTitle}>
+                    {text('确定要离开烹饪模式吗？', 'Leave cooking mode?')}
+                  </Text>
+                  <Text style={styles.cookingCloseText}>
+                    {timerDeadline !== null
+                      ? text(
+                          '倒计时仍在进行。你可以暂时离开，让它缩成漂浮窗；也可以结束本次烹饪。',
+                          'The timer is still running. Minimize it into a floating window, or end this cooking session.'
+                        )
+                      : text(
+                          '当前步骤还没有完成。你可以暂时离开并保留进度，也可以结束本次烹饪。',
+                          'This recipe is still in progress. Minimize it to keep your progress, or end this cooking session.'
+                        )}
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setIsCloseCookingConfirmOpen(false)}
+                    style={styles.keepCookingButton}>
+                    <Text style={styles.keepCookingButtonText}>{text('继续烹饪', 'Keep cooking')}</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={minimizeActiveCooking}
+                    style={styles.minimizeConfirmButton}>
+                    <Text style={styles.minimizeConfirmButtonText}>
+                      {timerDeadline !== null
+                        ? text('暂时离开，保留倒计时', 'Minimize and keep timer')
+                        : text('暂时离开，保留进度', 'Minimize and keep progress')}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={endCookingAndClose}
+                    style={styles.endCookingButton}>
+                    <Text style={styles.endCookingButtonText}>{text('结束并退出', 'End and leave')}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
           </Animated.View>
         ) : null}
       </Modal>
@@ -2222,6 +2676,7 @@ const styles = StyleSheet.create({
   emptyTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '800' },
   emptyText: { color: Colors.light.textSecondary, fontSize: 13 },
   detailPage: { flex: 1, overflow: 'hidden', backgroundColor: Colors.light.background },
+  recipeEdgeSwipeZone: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 32, zIndex: 50 },
   detailHeader: { minHeight: 70, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingBottom: 10, backgroundColor: Colors.light.background },
   headerButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   headerButtonText: { color: Colors.light.text, fontSize: 27, lineHeight: 29, fontWeight: '500' },
@@ -2266,7 +2721,12 @@ const styles = StyleSheet.create({
   ingredientCopy: { flex: 1, gap: 3 },
   ingredientName: { color: Colors.light.text, fontSize: 13, fontWeight: '900' },
   stockText: { color: Colors.light.textSecondary, fontSize: 10 },
+  ingredientAmountColumn: { alignItems: 'flex-end', gap: 6 },
   ingredientAmount: { color: Colors.light.text, fontSize: 12, fontWeight: '800' },
+  addIngredientToList: { minHeight: 27, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 9, borderRadius: 9, backgroundColor: Colors.light.primarySoft },
+  addIngredientToListAdded: { backgroundColor: Colors.light.backgroundElement },
+  addIngredientToListText: { color: Colors.light.primary, fontSize: 8.5, fontWeight: '900' },
+  addIngredientToListTextAdded: { color: Colors.light.textSecondary },
   stepsCountText: { color: Colors.light.textSecondary, fontSize: 10.5, fontWeight: '800' },
   stepsPreviewList: { overflow: 'hidden', borderRadius: 21, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   stepPreviewRow: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border },
@@ -2301,12 +2761,93 @@ const styles = StyleSheet.create({
   timerHint: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 13, borderRadius: 16, backgroundColor: '#FFFFFF17' },
   timerHintIcon: { fontSize: 18 },
   timerHintText: { flex: 1, color: '#E3F0E7', fontSize: 11, lineHeight: 17, fontWeight: '600' },
+  minimizeCookingButton: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 11, padding: 12, borderRadius: 17, backgroundColor: '#FFFFFFF2' },
+  minimizeCookingButtonIcon: { width: 34, height: 34, overflow: 'hidden', textAlign: 'center', lineHeight: 34, borderRadius: 17, color: '#FFFFFF', backgroundColor: Colors.light.primary, fontSize: 16, fontWeight: '900' },
+  minimizeCookingButtonCopy: { flex: 1, gap: 3 },
+  minimizeCookingButtonTitle: { color: Colors.light.text, fontSize: 11.5, fontWeight: '900' },
+  minimizeCookingButtonText: { color: Colors.light.textSecondary, fontSize: 9.5, lineHeight: 14 },
   mealOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   mealOption: { minWidth: 92, flex: 1, minHeight: 55, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   mealOptionSelected: { borderColor: Colors.light.primary, backgroundColor: Colors.light.primarySoft },
   mealOptionEmoji: { fontSize: 16 },
   mealOptionText: { color: Colors.light.textSecondary, fontSize: 11, fontWeight: '800' },
   mealOptionTextSelected: { color: Colors.light.primary },
+  completionLogPage: {
+    gap: 20,
+    padding: 18,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+    backgroundColor: Colors.light.surface,
+  },
+  completionLogHero: { flexDirection: 'row', alignItems: 'center', gap: 13 },
+  completionLogEmojiWrap: {
+    width: 54,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    backgroundColor: Colors.light.primarySoft,
+  },
+  completionLogEmoji: { fontSize: 28 },
+  completionLogHeroCopy: { flex: 1, gap: 4 },
+  completionLogTitle: { color: Colors.light.text, fontSize: 19, fontWeight: '900' },
+  completionLogSubtitle: { color: Colors.light.textSecondary, fontSize: 10.5, lineHeight: 16 },
+  completionLogSection: { gap: 10 },
+  completionLogSectionTitle: { color: Colors.light.text, fontSize: 13, fontWeight: '900' },
+  completionTimeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  nowTimeButton: {
+    minHeight: 32,
+    justifyContent: 'center',
+    paddingHorizontal: 11,
+    borderRadius: 11,
+    backgroundColor: Colors.light.primarySoft,
+  },
+  nowTimeButtonText: { color: Colors.light.primary, fontSize: 10, fontWeight: '900' },
+  mealTimePresets: { flexDirection: 'row', gap: 8 },
+  mealTimePreset: {
+    flex: 1,
+    minHeight: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+    backgroundColor: Colors.light.surface,
+  },
+  mealTimePresetSelected: { borderColor: Colors.light.primary, backgroundColor: Colors.light.primarySoft },
+  mealTimePresetText: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  mealTimePresetTextSelected: { color: Colors.light.primary },
+  mealTimeInputWrap: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    paddingHorizontal: 13,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+    backgroundColor: Colors.light.surface,
+  },
+  mealTimeInputWrapError: { borderColor: Colors.light.danger, backgroundColor: Colors.light.dangerSoft },
+  mealTimeInputIcon: { fontSize: 16 },
+  mealTimeInput: { flex: 1, paddingVertical: 10, color: Colors.light.text, fontSize: 16, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  mealTimeError: { color: Colors.light.danger, fontSize: 10.5, fontWeight: '700' },
+  completionInlineHint: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 13, borderRadius: 16, backgroundColor: Colors.light.primarySoft },
+  completionInlineHintIcon: { width: 28, height: 28, overflow: 'hidden', textAlign: 'center', lineHeight: 28, borderRadius: 14, color: '#FFFFFF', backgroundColor: Colors.light.primary, fontSize: 13, fontWeight: '900' },
+  completionInlineHintText: { flex: 1, color: Colors.light.primary, fontSize: 10.5, lineHeight: 16, fontWeight: '700' },
+  cookingCloseBackdrop: { zIndex: 100, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#102A2073' },
+  cookingCloseDialog: { width: '100%', maxWidth: 390, alignItems: 'center', gap: 12, padding: 22, borderRadius: 27, backgroundColor: Colors.light.surface, shadowColor: '#102A20', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.24, shadowRadius: 28, elevation: 20 },
+  cookingCloseIcon: { width: 62, height: 62, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: Colors.light.primarySoft },
+  cookingCloseIconText: { fontSize: 34 },
+  cookingCloseTitle: { color: Colors.light.text, fontSize: 19, fontWeight: '900', textAlign: 'center' },
+  cookingCloseText: { color: Colors.light.textSecondary, fontSize: 11, lineHeight: 17, textAlign: 'center', marginBottom: 2 },
+  keepCookingButton: { width: '100%', minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: Colors.light.primary },
+  keepCookingButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
+  minimizeConfirmButton: { width: '100%', minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: Colors.light.primarySoft },
+  minimizeConfirmButtonText: { color: Colors.light.primary, fontSize: 12.5, fontWeight: '900' },
+  endCookingButton: { minHeight: 38, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 15 },
+  endCookingButtonText: { color: Colors.light.danger, fontSize: 11.5, fontWeight: '800' },
   bottomActionBar: { position: 'absolute', left: 0, right: 0, bottom: 0, minHeight: 88, flexDirection: 'row', gap: 10, padding: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.light.border, backgroundColor: Platform.OS === 'web' ? '#FAF9F6F5' : Colors.light.background },
   secondaryAction: { minWidth: 104, minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: Colors.light.backgroundElement },
   secondaryActionText: { color: Colors.light.text, fontSize: 14, fontWeight: '900' },

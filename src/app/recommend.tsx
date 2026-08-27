@@ -177,6 +177,8 @@ export default function HealthReportScreen() {
     setDailyGoals,
     deleteMealRecord,
     deleteDrinkRecord,
+    dietaryPreferences,
+    setDietaryPreferences,
   } = useHealth();
   const { language, locale, text } = useLanguage();
   const [suggestionOffset, setSuggestionOffset] = useState(0);
@@ -197,6 +199,10 @@ export default function HealthReportScreen() {
   const [isGoalFormOpen, setIsGoalFormOpen] = useState(false);
   const [goalCarbs, setGoalCarbs] = useState(String(dailyCarbGoal));
   const [goalFluid, setGoalFluid] = useState(String(dailyFluidGoal));
+  const [isDietaryFormOpen, setIsDietaryFormOpen] = useState(false);
+  const [allergyInput, setAllergyInput] = useState((dietaryPreferences?.allergies ?? []).join('、'));
+  const [avoidInput, setAvoidInput] = useState((dietaryPreferences?.avoid ?? []).join('、'));
+  const [dietaryNotes, setDietaryNotes] = useState(dietaryPreferences?.notes ?? '');
 
   const mealRecords = useMemo(
     () => allMealRecords.filter((record) => record.date === selectedDate),
@@ -263,6 +269,10 @@ export default function HealthReportScreen() {
       .flatMap((record) => [record.foods, record.foodsEn ?? ''])
       .join(' ')
       .toLocaleLowerCase();
+    const restrictedTerms = [
+      ...(dietaryPreferences?.allergies ?? []),
+      ...(dietaryPreferences?.avoid ?? []),
+    ].map((term) => term.trim().toLocaleLowerCase()).filter(Boolean);
     const ranked = recipes
       .map((recipe) => {
         const match = getRecipeMatch(recipe);
@@ -279,6 +289,14 @@ export default function HealthReportScreen() {
           consumedText.includes(name.toLocaleLowerCase())
         );
         const varietyBonus = Math.min(recipe.ingredients.length, 4) * 2;
+        const searchableRecipe = [
+          recipe.name,
+          localizeContent(recipe.name, 'en'),
+          recipe.description,
+          ...recipe.ingredients.map((ingredient) => ingredient.name),
+          ...(recipe.tags ?? []),
+        ].join(' ').toLocaleLowerCase();
+        const excludedBy = restrictedTerms.filter((term) => searchableRecipe.includes(term));
 
         return {
           recipe,
@@ -286,13 +304,15 @@ export default function HealthReportScreen() {
           expiringNames,
           wasConsumed,
           score: match.percentage * 0.75 + urgency * 25 + varietyBonus,
+          excludedBy,
         };
       })
+      .filter((item) => item.excludedBy.length === 0)
       .sort((a, b) => b.score - a.score);
 
     const notConsumed = ranked.filter((item) => !item.wasConsumed);
     return notConsumed.length > 0 ? notConsumed : ranked;
-  }, [getRecipeMatch, inventory, mealRecords, recipes]);
+  }, [dietaryPreferences, getRecipeMatch, inventory, mealRecords, recipes]);
 
   const suggestion = rankedRecipes[suggestionOffset % rankedRecipes.length];
   const plannedRecipe = recipes.find((recipe) => recipe.id === plannedRecipeId);
@@ -421,6 +441,21 @@ export default function HealthReportScreen() {
     setStatus({ zh: '每日摄入目标已更新。', en: 'Daily intake goals updated.' });
   }
 
+  function saveDietaryPreferences() {
+    const parse = (value: string) => value
+      .split(/[、,，\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    setDietaryPreferences({
+      allergies: parse(allergyInput),
+      avoid: parse(avoidInput),
+      notes: dietaryNotes.trim(),
+    });
+    setIsDietaryFormOpen(false);
+    setSuggestionOffset(0);
+    setStatus({ zh: '过敏与忌口设置已更新，推荐已重新筛选。', en: 'Dietary preferences updated and suggestions re-filtered.' });
+  }
+
   if (!suggestion) return null;
 
   const { recipe, match, expiringNames } = suggestion;
@@ -525,6 +560,33 @@ export default function HealthReportScreen() {
         </View>
 
         <View style={styles.section}>
+          <SectionHeader title={text('过敏与饮食偏好', 'Allergies & preferences')} detail={text('用于筛选推荐', 'Used to filter suggestions')} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={text('编辑过敏与忌口', 'Edit allergies and dietary preferences')}
+            onPress={() => {
+              setAllergyInput((dietaryPreferences?.allergies ?? []).join('、'));
+              setAvoidInput((dietaryPreferences?.avoid ?? []).join('、'));
+              setDietaryNotes(dietaryPreferences?.notes ?? '');
+              setIsDietaryFormOpen(true);
+            }}
+            style={({ pressed }) => [styles.dietaryCard, pressed && styles.pressed]}>
+            <View style={styles.dietaryIcon}><Text style={styles.dietaryEmoji}>🛡️</Text></View>
+            <View style={styles.dietaryCopy}>
+              <Text style={styles.dietaryTitle}>
+                {(dietaryPreferences?.allergies.length ?? 0) + (dietaryPreferences?.avoid.length ?? 0) > 0
+                  ? text(`已记录 ${(dietaryPreferences?.allergies.length ?? 0) + (dietaryPreferences?.avoid.length ?? 0)} 项`, `${(dietaryPreferences?.allergies.length ?? 0) + (dietaryPreferences?.avoid.length ?? 0)} preferences saved`)
+                  : text('还没有设置', 'Not configured yet')}
+              </Text>
+              <Text style={styles.dietaryText} numberOfLines={2}>
+                {text('推荐会按菜谱文字和食材名称排除匹配项；仍需亲自核对包装标签。', 'Suggestions exclude text matches in recipe ingredients; always verify package labels yourself.')}
+              </Text>
+            </View>
+            <Text style={styles.dietaryChevron}>›</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.section}>
           <SectionHeader
             title={text('今日摄入圆环', 'Today’s intake rings')}
             detail={text('目标可个性化', 'Personalised goals')}
@@ -555,8 +617,8 @@ export default function HealthReportScreen() {
             </View>
             <Text style={styles.ringsFootnote}>
               {text(
-                '碳水与饮水量目标目前是演示值；不同年龄、活动量和健康状况需要不同目标。',
-                'Carb and water-intake goals are demo values; needs vary by age, activity, and health.'
+                '当前显示初始参考目标，可按自己的习惯修改；如有特殊健康需求，请遵循专业建议。',
+                'These are editable starting goals. Follow professional guidance for specific health needs.'
               )}
             </Text>
             <Pressable
@@ -948,9 +1010,36 @@ export default function HealthReportScreen() {
                 </Text>
               </Pressable>
             </View>
+            <View style={styles.recommendationDisclosure}>
+              <Text style={styles.recommendationDisclosureTitle}>{text('为什么会看到这道菜', 'How this was chosen')}</Text>
+              <Text style={styles.recommendationDisclosureText}>{text('排序只使用本机/家庭中的库存匹配、临期食材、当天饮食记录与已保存的忌口；不会诊断营养或食物安全问题。过敏筛选目前是文字匹配，烹饪前请再次核对食材与包装标签。', 'Ranking uses household inventory match, expiring items, today’s meal log, and saved preferences. It does not diagnose nutrition or food safety. Allergy filtering is text-based, so re-check every ingredient and package label before cooking.')}</Text>
+            </View>
           </View>
         </View>
       </AppScreen>
+
+      <Modal visible={isDietaryFormOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setIsDietaryFormOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalPage}>
+          <View style={styles.modalHeader}>
+            <Pressable onPress={() => setIsDietaryFormOpen(false)} hitSlop={12}><Text style={styles.modalCancel}>{text('取消', 'Cancel')}</Text></Pressable>
+            <Text style={styles.modalTitle}>{text('过敏与饮食偏好', 'Dietary preferences')}</Text>
+            <Pressable onPress={saveDietaryPreferences} hitSlop={12}><Text style={styles.modalSave}>{text('保存', 'Save')}</Text></Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.modalForm} keyboardShouldPersistTaps="handled">
+            <View style={styles.safetyBanner}>
+              <Text style={styles.safetyBannerEmoji}>⚠️</Text>
+              <Text style={styles.safetyBannerText}>{text('这里的筛选不能替代医生建议，也不能识别交叉污染或隐藏配料。严重过敏时请始终阅读标签并咨询专业人士。', 'This filter cannot replace medical advice or detect cross-contamination and hidden ingredients. For serious allergies, always read labels and seek professional guidance.')}</Text>
+            </View>
+            <Text style={styles.modalFieldLabel}>{text('过敏食物', 'Allergies')}</Text>
+            <TextInput value={allergyInput} onChangeText={setAllergyInput} multiline placeholder={text('例如：花生、牛奶、虾', 'For example: peanuts, milk, shrimp')} placeholderTextColor={Colors.light.textSecondary} style={[styles.modalInput, styles.multilineInput]} />
+            <Text style={styles.modalFieldHint}>{text('用逗号或顿号分隔。', 'Separate items with commas.')}</Text>
+            <Text style={styles.modalFieldLabel}>{text('不吃或尽量避免', 'Avoid or limit')}</Text>
+            <TextInput value={avoidInput} onChangeText={setAvoidInput} multiline placeholder={text('例如：香菜、酒精、猪肉', 'For example: cilantro, alcohol, pork')} placeholderTextColor={Colors.light.textSecondary} style={[styles.modalInput, styles.multilineInput]} />
+            <Text style={styles.modalFieldLabel}>{text('补充说明', 'Notes')}</Text>
+            <TextInput value={dietaryNotes} onChangeText={setDietaryNotes} multiline placeholder={text('例如：低盐、乳糖不耐受', 'For example: low sodium, lactose intolerance')} placeholderTextColor={Colors.light.textSecondary} style={[styles.modalInput, styles.multilineInput]} />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <Modal
         visible={isMealFormOpen}
@@ -1437,6 +1526,13 @@ const styles = StyleSheet.create({
   insightTitle: { color: Colors.light.text, fontSize: 13, fontWeight: '900' },
   insightText: { color: Colors.light.textSecondary, fontSize: 11.5, lineHeight: 17 },
   healthDisclaimer: { color: Colors.light.textSecondary, fontSize: 10.5, lineHeight: 16, paddingHorizontal: 4 },
+  dietaryCard: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 20, borderWidth: 1, borderColor: '#D9D3B8', backgroundColor: '#FFFBEF' },
+  dietaryIcon: { width: 47, height: 47, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: '#FFFFFF' },
+  dietaryEmoji: { fontSize: 23 },
+  dietaryCopy: { flex: 1, gap: 4 },
+  dietaryTitle: { color: Colors.light.text, fontSize: 13.5, fontWeight: '900' },
+  dietaryText: { color: Colors.light.textSecondary, fontSize: 10.5, lineHeight: 16 },
+  dietaryChevron: { color: Colors.light.textSecondary, fontSize: 25 },
   recommendationCard: { gap: 16, padding: 18, borderRadius: 24, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   recommendationTop: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   recommendationEmojiBox: { width: 76, height: 76, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.light.primarySoft },
@@ -1456,6 +1552,9 @@ const styles = StyleSheet.create({
   ingredientChip: { paddingHorizontal: 9, paddingVertical: 6, borderRadius: 9, backgroundColor: Colors.light.backgroundElement },
   ingredientChipText: { color: Colors.light.textSecondary, fontSize: 10.5, fontWeight: '700' },
   recommendationActions: { flexDirection: 'row', gap: 10 },
+  recommendationDisclosure: { gap: 5, padding: 12, borderRadius: 14, backgroundColor: '#FFFBEF', borderWidth: 1, borderColor: '#E8DEC0' },
+  recommendationDisclosureTitle: { color: '#765A22', fontSize: 10.5, fontWeight: '900' },
+  recommendationDisclosureText: { color: '#7A6B4A', fontSize: 9.5, lineHeight: 15 },
   secondaryButton: { minWidth: 100, minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: Colors.light.backgroundElement },
   secondaryButtonText: { color: Colors.light.text, fontSize: 14, fontWeight: '900' },
   primaryButton: { flex: 1, minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: Colors.light.primary },
@@ -1466,6 +1565,14 @@ const styles = StyleSheet.create({
   modalTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '900' },
   modalSave: { color: Colors.light.primary, fontSize: 15, fontWeight: '900' },
   modalSaveDisabled: { opacity: 0.35 },
+  modalForm: { gap: 11, padding: 20, paddingBottom: 48 },
+  modalFieldLabel: { color: Colors.light.text, fontSize: 12, fontWeight: '900', marginTop: 4 },
+  modalFieldHint: { color: Colors.light.textSecondary, fontSize: 10 },
+  modalInput: { minHeight: 50, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 15, borderWidth: 1, borderColor: Colors.light.border, backgroundColor: Colors.light.surface, color: Colors.light.text, fontSize: 14 },
+  multilineInput: { minHeight: 78, textAlignVertical: 'top' },
+  safetyBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, padding: 13, borderRadius: 15, backgroundColor: Colors.light.warningSoft },
+  safetyBannerEmoji: { fontSize: 17 },
+  safetyBannerText: { flex: 1, color: '#765A22', fontSize: 10.5, lineHeight: 16 },
   form: { gap: 12, padding: 20, paddingBottom: 48 },
   fieldLabel: { color: Colors.light.text, fontSize: 13, fontWeight: '900', marginTop: 4 },
   mealTypeOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

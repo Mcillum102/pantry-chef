@@ -25,20 +25,43 @@ export type DrinkRecord = {
   time: string;
 };
 
-type HealthState = {
+export type PlannedMealType = 'breakfast' | 'lunch' | 'dinner';
+
+export type WeeklyMealPlanEntry = {
+  id: string;
+  date: string;
+  type: PlannedMealType;
+  recipeId: string;
+  completed: boolean;
+};
+
+export type HealthSnapshot = {
   mealRecords: MealRecord[];
   drinkRecords: DrinkRecord[];
   plannedRecipeId: string | null;
   dailyCarbGoal: number;
   dailyFluidGoal: number;
+  weeklyMealPlan?: WeeklyMealPlanEntry[];
+  dietaryPreferences?: DietaryPreferences;
 };
 
-type HealthContextValue = HealthState & {
+export type DietaryPreferences = {
+  allergies: string[];
+  avoid: string[];
+  notes: string;
+};
+
+type HealthContextValue = Omit<HealthSnapshot, 'weeklyMealPlan'> & {
+  weeklyMealPlan: WeeklyMealPlanEntry[];
   isHydrated: boolean;
+  snapshot: HealthSnapshot;
+  replaceSnapshot: (snapshot: HealthSnapshot) => void;
   setMealRecords: React.Dispatch<React.SetStateAction<MealRecord[]>>;
   setDrinkRecords: React.Dispatch<React.SetStateAction<DrinkRecord[]>>;
   setPlannedRecipeId: (recipeId: string | null) => void;
+  setWeeklyMealPlan: React.Dispatch<React.SetStateAction<WeeklyMealPlanEntry[]>>;
   setDailyGoals: (goals: { carbs?: number; fluid?: number }) => void;
+  setDietaryPreferences: (preferences: DietaryPreferences) => void;
   deleteMealRecord: (id: string) => void;
   deleteDrinkRecord: (id: string) => void;
 };
@@ -52,10 +75,25 @@ export function localDateKey(date = new Date()) {
 
 const today = localDateKey();
 
-const initialHealthState: HealthState = {
+export function createEmptyHealthSnapshot(): HealthSnapshot {
+  return {
+    dailyCarbGoal: 250,
+    dailyFluidGoal: 2000,
+    plannedRecipeId: null,
+    weeklyMealPlan: [],
+    dietaryPreferences: { allergies: [], avoid: [], notes: '' },
+    mealRecords: [],
+    drinkRecords: [],
+  };
+}
+
+export function createSampleHealthSnapshot(): HealthSnapshot {
+  return {
   dailyCarbGoal: 250,
   dailyFluidGoal: 2000,
   plannedRecipeId: null,
+  weeklyMealPlan: [],
+  dietaryPreferences: { allergies: [], avoid: [], notes: '' },
   mealRecords: [
     {
       id: 'breakfast-today',
@@ -96,20 +134,32 @@ const initialHealthState: HealthState = {
     { id: 'water-morning', date: today, beverageKey: 'water', volumeMl: 350, time: '09:30' },
     { id: 'coffee-morning', date: today, beverageKey: 'coffee', volumeMl: 300, time: '10:35' },
   ],
-};
+  };
+}
 
 const HealthContext = createContext<HealthContextValue | null>(null);
 
 export function HealthProvider({ children }: PropsWithChildren) {
-  const [state, setState, isHydrated] = usePersistentState<HealthState>(
+  const [state, setState, isHydrated] = usePersistentState<HealthSnapshot>(
     'health-state-v2',
-    initialHealthState
+    createEmptyHealthSnapshot()
   );
 
   const value = useMemo<HealthContextValue>(
-    () => ({
+    () => {
+      const weeklyMealPlan = state.weeklyMealPlan ?? [];
+      const dietaryPreferences = state.dietaryPreferences ?? { allergies: [], avoid: [], notes: '' };
+      return {
       ...state,
+      weeklyMealPlan,
+      dietaryPreferences,
       isHydrated,
+      snapshot: { ...state, weeklyMealPlan, dietaryPreferences },
+      replaceSnapshot: (snapshot) => setState({
+        ...snapshot,
+        weeklyMealPlan: snapshot.weeklyMealPlan ?? [],
+        dietaryPreferences: snapshot.dietaryPreferences ?? { allergies: [], avoid: [], notes: '' },
+      }),
       setMealRecords: (next) => {
         setState((current) => ({
           ...current,
@@ -125,12 +175,22 @@ export function HealthProvider({ children }: PropsWithChildren) {
       setPlannedRecipeId: (recipeId) => {
         setState((current) => ({ ...current, plannedRecipeId: recipeId }));
       },
+      setWeeklyMealPlan: (next) => {
+        setState((current) => ({
+          ...current,
+          weeklyMealPlan:
+            typeof next === 'function' ? next(current.weeklyMealPlan ?? []) : next,
+        }));
+      },
       setDailyGoals: ({ carbs, fluid }) => {
         setState((current) => ({
           ...current,
           dailyCarbGoal: carbs ?? current.dailyCarbGoal,
           dailyFluidGoal: fluid ?? current.dailyFluidGoal,
         }));
+      },
+      setDietaryPreferences: (preferences) => {
+        setState((current) => ({ ...current, dietaryPreferences: preferences }));
       },
       deleteMealRecord: (id) => {
         setState((current) => ({
@@ -144,7 +204,8 @@ export function HealthProvider({ children }: PropsWithChildren) {
           drinkRecords: current.drinkRecords.filter((record) => record.id !== id),
         }));
       },
-    }),
+    };
+    },
     [isHydrated, setState, state]
   );
 

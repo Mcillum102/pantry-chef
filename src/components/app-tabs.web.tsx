@@ -19,6 +19,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { FloatingCookingTimer } from '@/components/floating-cooking-timer';
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useLanguage } from '@/context/language-context';
 
@@ -49,6 +50,9 @@ export default function AppTabs() {
       <TabList asChild>
         <CustomTabList>
           <TabTrigger name="home" href="/" asChild>
+            <TabButton label={text('首页', 'Home')} icon="home-outline" selectedIcon="home" />
+          </TabTrigger>
+          <TabTrigger name="inventory" href="/inventory" asChild>
             <TabButton label={text('库存', 'Inventory')} icon="fridge-outline" selectedIcon="fridge" />
           </TabTrigger>
           <TabTrigger name="recipes" href="/recipes" asChild>
@@ -60,8 +64,13 @@ export default function AppTabs() {
           <TabTrigger name="profile" href="/profile" asChild>
             <TabButton label={text('我的', 'Profile')} icon="account-outline" selectedIcon="account" />
           </TabTrigger>
+          <TabTrigger name="planner" href="/planner" style={styles.hiddenTab} />
+          <TabTrigger name="insights" href="/insights" style={styles.hiddenTab} />
+          <TabTrigger name="widgets" href="/widgets" style={styles.hiddenTab} />
+          <TabTrigger name="account" href="/account" style={styles.hiddenTab} />
         </CustomTabList>
       </TabList>
+      <FloatingCookingTimer />
     </Tabs>
   );
 }
@@ -241,5 +250,8 @@ const styles = StyleSheet.create({
   selectedLabel: {
     color: Colors.light.primary,
     fontWeight: '700',
+  },
+  hiddenTab: {
+    display: 'none',
   },
 });

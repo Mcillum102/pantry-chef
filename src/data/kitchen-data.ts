@@ -31,12 +31,25 @@ export type InventoryItem = {
   daysLeft: number;
   purchaseDate: string;
   expiryDate?: string;
+  openedAt?: string;
+  openedExpiryDate?: string;
   cookingSuggestions?: string[];
   volumeMlPerUnit?: number;
   ingredientId?: string;
   batchId?: string;
   barcode?: string;
 };
+
+export type DeletedInventoryRecord = {
+  id: string;
+  item: InventoryItem;
+  reason: 'deleted' | 'finished' | 'expired' | 'discarded';
+  deletedAt: string;
+};
+
+export function effectiveExpiryDate(item: Pick<InventoryItem, 'expiryDate' | 'openedExpiryDate'>) {
+  return item.openedExpiryDate ?? item.expiryDate;
+}
 
 function dateFromToday(offset: number) {
   const date = new Date();
@@ -66,8 +79,30 @@ export type InventoryTransaction = {
   itemName: string;
   amount: number;
   unit: string;
-  reason: 'added' | 'adjusted' | 'cooked' | 'deleted' | 'restored';
+  reason:
+    | 'added'
+    | 'adjusted'
+    | 'cooked'
+    | 'deleted'
+    | 'restored'
+    | 'finished'
+    | 'expired'
+    | 'discarded';
   recipeId?: string;
+  createdAt: string;
+};
+
+export type ShoppingListItem = {
+  id: string;
+  ingredientId: string;
+  name: string;
+  nameEn?: string;
+  emoji: string;
+  quantity: number;
+  unit: string;
+  checked: boolean;
+  sourceRecipeId?: string;
+  sourceRecipeName?: string;
   createdAt: string;
 };
 

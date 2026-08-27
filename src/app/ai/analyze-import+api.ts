@@ -74,7 +74,9 @@ export async function POST(request: Request) {
   }
 
   const isInventory = body.mode === 'ingredients-text';
-  const isImage = body.mode === 'recipe-image';
+  const isRecipeImage = body.mode === 'recipe-image';
+  const isReceiptImage = body.mode === 'receipt-image';
+  const isImage = isRecipeImage || isReceiptImage;
   const isLink = body.mode === 'recipe-link';
   if (!isInventory && !isImage && !isLink) return Response.json({ error: 'Invalid mode' }, { status: 400 });
   if (isInventory && (!body.text || body.text.length > 6_000)) return Response.json({ error: 'Invalid text' }, { status: 400 });
@@ -97,9 +99,25 @@ export async function POST(request: Request) {
     `Choose one category from ${AI_RECIPE_CATEGORIES.join(', ')}.`,
     'Use timerMinutes 0 when a step has no explicit timer. Keep carbsPerServing 0 when unknown.',
   ].join(' ');
+  const receiptInstructions = [
+    'Read this grocery receipt and return only purchased food, drinks, snacks, desserts, and ready meals.',
+    'Ignore prices, taxes, discounts, loyalty lines, totals, payment information, store information, and non-food goods.',
+    'Use Chinese product names. Expand understandable receipt abbreviations, but never invent an unreadable product.',
+    'Use the purchased line quantity when visible; otherwise use quantity 1 and a sensible package unit.',
+    'Infer a suitable emoji, inventory library, storage location, and conservative shelf-life estimate.',
+    'Give every item a unique short id.',
+  ].join(' ');
+  const inventoryInstructions = isReceiptImage
+    ? receiptInstructions
+    : 'Return only purchased inventory items in the requested schema.';
   const input = isInventory
     ? `Analyze this Chinese shopping description and list every purchased item. Normalize units and infer a sensible emoji, inventory library, storage location, and shelf life. Give every item a unique short id.\n\n${body.text}`
-    : isImage
+    : isReceiptImage
+      ? [{ role: 'user', content: [
+          { type: 'input_text', text: receiptInstructions },
+          { type: 'input_image', image_url: body.imageDataUrl, detail: 'high' },
+        ] }]
+    : isRecipeImage
       ? [{ role: 'user', content: [
           { type: 'input_text', text: recipeInstructions },
           { type: 'input_image', image_url: body.imageDataUrl, detail: 'high' },
@@ -113,13 +131,13 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model: process.env.OPENAI_RECIPE_MODEL || 'gpt-5.6-luna',
         store: false,
-        instructions: isInventory ? 'Return only purchased inventory items in the requested schema.' : recipeInstructions,
+        instructions: isInventory || isReceiptImage ? inventoryInstructions : recipeInstructions,
         input,
         ...(isLink ? { tools: [{ type: 'web_search' }] } : {}),
         text: {
           format: {
-            type: 'json_schema', name: isInventory ? 'inventory_import' : 'recipe_import',
-            strict: true, schema: isInventory ? inventorySchema : recipeSchema,
+            type: 'json_schema', name: isInventory || isReceiptImage ? 'inventory_import' : 'recipe_import',
+            strict: true, schema: isInventory || isReceiptImage ? inventorySchema : recipeSchema,
           },
         },
       }),

@@ -3,6 +3,8 @@ import 'expo-sqlite/localStorage/install';
 
 import { createClient } from '@supabase/supabase-js';
 
+import { createCloudSyncApi } from '@/services/cloud-sync-core';
+
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
@@ -15,38 +17,44 @@ export const supabase = isCloudConfigured
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: false,
+        flowType: 'pkce',
       },
     })
   : null;
 
-export async function sendMagicLink(email: string) {
-  if (!supabase) throw new Error('cloud-not-configured');
-  const { error } = await supabase.auth.signInWithOtp({ email });
-  if (error) throw error;
-}
+const cloudApi = createCloudSyncApi(supabase);
 
-export async function pushHouseholdSnapshot(householdId: string, payload: unknown) {
-  if (!supabase) throw new Error('cloud-not-configured');
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) throw new Error('cloud-not-signed-in');
-  const { error } = await supabase.from('household_snapshots').upsert({
-    household_id: householdId,
-    owner_id: userData.user.id,
-    payload,
-    updated_at: new Date().toISOString(),
-  });
-  if (error) throw error;
-}
+export const {
+  acceptHouseholdInvite,
+  createCloudHousehold,
+  createHouseholdInvite,
+  deleteCloudAccount,
+  ensureCloudHousehold,
+  exchangeCloudAuthCode,
+  getCloudSession,
+  loadCloudHousehold,
+  leaveCloudHousehold,
+  pullHouseholdSnapshot,
+  pushHouseholdSnapshot,
+  sendMagicLink,
+  sendPasswordReset,
+  signInWithPassword,
+  signInWithOAuthProvider,
+  signOutFromCloud,
+  signUpWithPassword,
+  subscribeToCloudAuth,
+  subscribeToHouseholdSnapshot,
+  transferHouseholdOwnership,
+  removeHouseholdMember,
+  updateAccountPassword,
+  verifyEmailOtp,
+} = cloudApi;
 
-export async function createHouseholdInvite(householdId: string, email: string) {
-  if (!supabase) throw new Error('cloud-not-configured');
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) throw new Error('cloud-not-signed-in');
-  const { error } = await supabase.from('household_invites').insert({
-    household_id: householdId,
-    inviter_id: userData.user.id,
-    email: email.trim().toLocaleLowerCase(),
-    status: 'pending',
-  });
-  if (error) throw error;
-}
+export type {
+  CloudHousehold,
+  CloudInvite,
+  CloudMember,
+  CloudSnapshotPushResult,
+  CloudSnapshotRow,
+  SocialAuthProvider,
+} from '@/services/cloud-sync-core';

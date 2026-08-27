@@ -1,7 +1,8 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Icon, Label, NativeTabs, VectorIcon } from 'expo-router/unstable-native-tabs';
-import { Platform, useColorScheme } from 'react-native';
+import { Platform, useColorScheme, View } from 'react-native';
 
+import { FloatingCookingTimer } from '@/components/floating-cooking-timer';
 import { Colors } from '@/constants/theme';
 import { useLanguage } from '@/context/language-context';
 
@@ -11,18 +12,27 @@ export default function AppTabs() {
   const { text } = useLanguage();
 
   return (
-    <NativeTabs
-      backgroundColor={Platform.OS === 'ios' ? 'rgba(247, 245, 239, 0.72)' : colors.background}
-      blurEffect="systemUltraThinMaterial"
-      minimizeBehavior="onScrollDown"
-      tintColor={Colors.light.primary}
-      iconColor={{ default: Colors.light.textSecondary, selected: Colors.light.primary }}
-      indicatorColor={Colors.light.primarySoft}
-      labelStyle={{
-        default: { color: Colors.light.textSecondary, fontSize: 11 },
-        selected: { color: Colors.light.primary, fontSize: 11, fontWeight: '700' },
-      }}>
+    <View style={{ flex: 1 }}>
+      <NativeTabs
+        backgroundColor={Platform.OS === 'ios' ? 'rgba(247, 245, 239, 0.72)' : colors.background}
+        blurEffect="systemUltraThinMaterial"
+        minimizeBehavior="onScrollDown"
+        tintColor={Colors.light.primary}
+        iconColor={{ default: Colors.light.textSecondary, selected: Colors.light.primary }}
+        indicatorColor={Colors.light.primarySoft}
+        labelStyle={{
+          default: { color: Colors.light.textSecondary, fontSize: 11 },
+          selected: { color: Colors.light.primary, fontSize: 11, fontWeight: '700' },
+        }}>
       <NativeTabs.Trigger name="index">
+        <Label>{text('首页', 'Home')}</Label>
+        <Icon
+          sf={{ default: 'house', selected: 'house.fill' }}
+          androidSrc={<VectorIcon family={MaterialCommunityIcons} name="home-outline" />}
+        />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="inventory">
         <Label>{text('库存', 'Inventory')}</Label>
         <Icon
           sf={{ default: 'refrigerator', selected: 'refrigerator.fill' }}
@@ -53,6 +63,12 @@ export default function AppTabs() {
           androidSrc={<VectorIcon family={MaterialCommunityIcons} name="account-outline" />}
         />
       </NativeTabs.Trigger>
-    </NativeTabs>
+      <NativeTabs.Trigger name="planner" hidden />
+      <NativeTabs.Trigger name="insights" hidden />
+      <NativeTabs.Trigger name="widgets" hidden />
+      <NativeTabs.Trigger name="account" hidden />
+      </NativeTabs>
+      <FloatingCookingTimer />
+    </View>
   );
 }

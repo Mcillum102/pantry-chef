@@ -50,7 +50,11 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "web:export": "expo export --platform web",
+    "web:serve": "expo serve",
+    "web:deploy": "npx eas-cli@latest deploy --prod",
+    "lint": "expo lint",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.ts"
   },
   "private": true
 }

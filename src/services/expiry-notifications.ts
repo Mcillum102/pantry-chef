@@ -3,15 +3,8 @@ import { Platform } from 'react-native';
 
 import type { AppLanguage } from '@/context/language-context';
 import type { InventoryItem } from '@/data/kitchen-data';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: false,
-    shouldSetBadge: true,
-  }),
-});
+import { parseReminderTime } from '@/data/reminder-utils';
+import { cancelExpiryNotifications } from '@/services/app-notifications';
 
 async function prepareAndroidChannel() {
   if (Platform.OS !== 'android') return;
@@ -24,18 +17,21 @@ async function prepareAndroidChannel() {
 async function scheduleInventoryNotifications(
   inventory: InventoryItem[],
   leadDays: number,
+  reminderTime: string,
   language: AppLanguage
 ) {
   await prepareAndroidChannel();
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  await cancelExpiryNotifications();
   const now = Date.now();
+  const time = parseReminderTime(reminderTime) ?? { hour: 9, minute: 0 };
   const candidates = inventory
     .filter((item) => item.quantity > 0 && item.expiryDate)
     .sort((a, b) => (a.expiryDate ?? '').localeCompare(b.expiryDate ?? ''))
     .slice(0, 40);
 
   for (const item of candidates) {
-    const triggerDate = new Date(`${item.expiryDate}T09:00:00`);
+    const triggerDate = new Date(`${item.expiryDate}T00:00:00`);
+    triggerDate.setHours(time.hour, time.minute, 0, 0);
     triggerDate.setDate(triggerDate.getDate() - leadDays);
     if (triggerDate.getTime() <= now) continue;
 
@@ -61,27 +57,29 @@ async function scheduleInventoryNotifications(
 export async function enableExpiryNotifications(
   inventory: InventoryItem[],
   leadDays: number,
+  reminderTime: string,
   language: AppLanguage
 ) {
   const current = await Notifications.getPermissionsAsync();
   const permission =
     current.status === 'granted' ? current : await Notifications.requestPermissionsAsync();
   if (permission.status !== 'granted') return false;
-  await scheduleInventoryNotifications(inventory, leadDays, language);
+  await scheduleInventoryNotifications(inventory, leadDays, reminderTime, language);
   return true;
 }
 
 export async function refreshExpiryNotifications(
   inventory: InventoryItem[],
   leadDays: number,
+  reminderTime: string,
   language: AppLanguage
 ) {
   const permission = await Notifications.getPermissionsAsync();
   if (permission.status !== 'granted') return false;
-  await scheduleInventoryNotifications(inventory, leadDays, language);
+  await scheduleInventoryNotifications(inventory, leadDays, reminderTime, language);
   return true;
 }
 
 export async function disableExpiryNotifications() {
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  await cancelExpiryNotifications();
 }

@@ -35,6 +35,10 @@ export function analyzeRecipeImage(imageDataUrl: string) {
   return postAnalysis<ImportedRecipe>({ mode: 'recipe-image', imageDataUrl });
 }
 
+export function analyzeReceiptImage(imageDataUrl: string) {
+  return postAnalysis<SmartInventoryItem[]>({ mode: 'receipt-image', imageDataUrl });
+}
+
 export function analyzeRecipeLink(url: string) {
   return postAnalysis<ImportedRecipe>({ mode: 'recipe-link', url });
 }
