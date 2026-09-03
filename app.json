@@ -43,7 +43,7 @@
       "orientation": "portrait-primary",
       "themeColor": "#2F6B4F",
       "backgroundColor": "#F7F5EF",
-      "barStyle": "default"
+      "barStyle": "black-translucent"
     },
     "plugins": [
       "expo-router",
