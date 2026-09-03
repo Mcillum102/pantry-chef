@@ -42,6 +42,13 @@ const glassBackdrop: WebGlassStyle = {
   WebkitBackdropFilter: 'blur(26px) saturate(180%)',
 };
 
+const safeAreaTabBarStyle = {
+  boxSizing: 'border-box',
+  bottom: 'max(8px, env(safe-area-inset-bottom, 0px))',
+  paddingRight: 'max(14px, env(safe-area-inset-right, 0px))',
+  paddingLeft: 'max(14px, env(safe-area-inset-left, 0px))',
+} as unknown as ViewStyle;
+
 export default function AppTabs() {
   const { text } = useLanguage();
 
@@ -165,7 +172,10 @@ export function TabButton({
 
 export function CustomTabList(props: TabListProps) {
   return (
-    <View {...props} nativeID="app-tab-bar" style={styles.tabListContainer}>
+    <View
+      {...props}
+      nativeID="app-tab-bar-v2"
+      style={[styles.tabListContainer, safeAreaTabBarStyle]}>
       <View style={styles.shadowContainer}>
         <View style={[styles.innerContainer, glassBackdrop]}>
           <View style={styles.glassHighlight} />

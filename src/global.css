@@ -43,7 +43,7 @@ body {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
-#app-tab-bar {
+#app-tab-bar-v2 {
   box-sizing: border-box;
   bottom: max(8px, env(safe-area-inset-bottom, 0px)) !important;
   padding-right: max(14px, env(safe-area-inset-right, 0px));
