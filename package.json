@@ -52,7 +52,7 @@
     "web": "expo start --web",
     "web:export": "expo export --platform web",
     "web:serve": "expo serve",
-    "web:deploy": "npx eas-cli@latest deploy --prod",
+    "web:deploy": "npx eas-cli@22.6.0 deploy --prod",
     "lint": "expo lint",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.ts"
   },
