@@ -7,7 +7,6 @@
   --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
   --app-background: #f7f5ef;
-  --app-safe-area: #2f6d50;
 }
 
 html,
@@ -25,9 +24,27 @@ body {
 
 #root {
   box-sizing: border-box;
+  background-color: var(--app-background);
+}
+
+/* Let page backgrounds extend beneath the iPhone status bar while keeping
+   interactive content clear of the camera cutout. */
+#app-screen-content {
+  box-sizing: border-box;
   padding-top: env(safe-area-inset-top, 0px);
   padding-right: env(safe-area-inset-right, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-left: env(safe-area-inset-left, 0px);
-  background-color: var(--app-safe-area);
+}
+
+#inventory-add-header,
+#inventory-smart-add-header {
+  box-sizing: border-box;
+  min-height: calc(54px + env(safe-area-inset-top, 0px)) !important;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+#app-tab-bar {
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
 }

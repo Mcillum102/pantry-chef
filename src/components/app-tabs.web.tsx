@@ -165,7 +165,7 @@ export function TabButton({
 
 export function CustomTabList(props: TabListProps) {
   return (
-    <View {...props} style={styles.tabListContainer}>
+    <View {...props} nativeID="app-tab-bar" style={styles.tabListContainer}>
       <View style={styles.shadowContainer}>
         <View style={[styles.innerContainer, glassBackdrop]}>
           <View style={styles.glassHighlight} />

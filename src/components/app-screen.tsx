@@ -101,7 +101,7 @@ export function AppScreen({ eyebrow, title, subtitle, action, children }: AppScr
           paddingBottom: insets.bottom + 112,
         },
       ]}>
-      <View style={styles.inner}>
+      <View nativeID="app-screen-content" style={styles.inner}>
         <Animated.View style={[styles.header, headerAnimatedStyle]}>
           <View style={styles.headerCopy}>
             {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}

@@ -1389,7 +1389,7 @@ export default function InventoryScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setIsSmartAddOpen(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalPage}>
-          <View style={styles.modalHeader}>
+          <View nativeID="inventory-smart-add-header" style={styles.modalHeader}>
             <Pressable accessibilityRole="button" onPress={() => setIsSmartAddOpen(false)} hitSlop={12}>
               <Text style={styles.modalCancel}>{text('取消', 'Cancel')}</Text>
             </Pressable>
@@ -1614,7 +1614,7 @@ export default function InventoryScreen() {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalPage}>
-          <View style={styles.modalHeader}>
+          <View nativeID="inventory-add-header" style={styles.modalHeader}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={text('取消编辑', 'Cancel editing')}
