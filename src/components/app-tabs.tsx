@@ -67,6 +67,7 @@ export default function AppTabs() {
       <NativeTabs.Trigger name="insights" hidden />
       <NativeTabs.Trigger name="widgets" hidden />
       <NativeTabs.Trigger name="account" hidden />
+      <NativeTabs.Trigger name="preferences" hidden />
       </NativeTabs>
       <FloatingCookingTimer />
     </View>

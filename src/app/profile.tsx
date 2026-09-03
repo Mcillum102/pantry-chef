@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import { Modal, Pressable, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { AppScreen, SectionHeader } from '@/components/app-screen';
@@ -318,6 +318,23 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.section}>
+        <SectionHeader title={text('偏好设置', 'Preferences')} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={text('打开偏好设置', 'Open preferences')}
+          onPress={() => router.push('/preferences' as Href)}
+          style={({ pressed }) => [styles.widgetSettingsCard, pressed && styles.pressed]}>
+          <View style={styles.widgetSettingsIcon}><Text style={styles.widgetSettingsEmoji}>⚙️</Text></View>
+          <View style={styles.widgetSettingsCopy}>
+            <Text style={styles.widgetSettingsTitle}>{text('语言、提醒与同步', 'Language, reminders & sync')}</Text>
+            <Text style={styles.widgetSettingsText}>{text('集中调整通知时间、保质期建议和多端同步', 'Manage alert times, shelf-life suggestions, and device sync')}</Text>
+          </View>
+          <Text style={styles.widgetSettingsBadge}>{text('设置', 'OPEN')}</Text>
+          <Text style={styles.widgetSettingsChevron}>›</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.hiddenPreferences}>
         <SectionHeader title={text('偏好设置', 'Preferences')} />
         <View style={styles.settingsCard}>
           <View style={styles.settingRow}>
@@ -865,6 +882,7 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  hiddenPreferences: { display: 'none' },
   pressed: { opacity: 0.72 },
   profileCard: {
     flexDirection: 'row',

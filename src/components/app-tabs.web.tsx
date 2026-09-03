@@ -1,4 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import type { Href } from 'expo-router';
 import {
   Tabs,
   TabList,
@@ -68,6 +69,7 @@ export default function AppTabs() {
           <TabTrigger name="insights" href="/insights" style={styles.hiddenTab} />
           <TabTrigger name="widgets" href="/widgets" style={styles.hiddenTab} />
           <TabTrigger name="account" href="/account" style={styles.hiddenTab} />
+          <TabTrigger name="preferences" href={'/preferences' as Href} style={styles.hiddenTab} />
         </CustomTabList>
       </TabList>
       <FloatingCookingTimer />
