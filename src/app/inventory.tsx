@@ -48,6 +48,10 @@ import {
   type ShoppingListItem,
   type StorageLocation,
 } from '@/data/kitchen-data';
+import {
+  buildQuickInventorySuggestions,
+  type QuickInventorySuggestion,
+} from '@/data/inventory-suggestions';
 import { getShelfLifeSuggestion } from '@/data/shelf-life-data';
 import type { SmartInventoryItem } from '@/data/ai-import';
 import { analyzeInventoryText, analyzeReceiptImage } from '@/services/ai-import';
@@ -119,19 +123,6 @@ const customLibraryEmojis = [
   '🧻', '🧼', '🕯️', '🎁',
 ];
 const customLibraryColors = ['#2F6D50', '#347C8C', '#C56A46', '#A65D7B', '#6E68A8', '#8A713F'];
-const quickItemPresets: {
-  name: string;
-  emoji: string;
-  library: InventoryLibrary;
-  storage: StorageLocation;
-  unit: string;
-  shelfDays: number;
-}[] = [
-  { name: '鸡蛋', emoji: '🥚', library: '食材', storage: '冷藏', unit: '个', shelfDays: 14 },
-  { name: '番茄', emoji: '🍅', library: '食材', storage: '冷藏', unit: '个', shelfDays: 7 },
-  { name: '鲜牛奶', emoji: '🥛', library: '饮料', storage: '冷藏', unit: '盒', shelfDays: 7 },
-  { name: '每日坚果', emoji: '🥜', library: '零食', storage: '零食车', unit: '袋', shelfDays: 120 },
-];
 const fallbackEmojis = [
   '📦', '🛍️', '🫙', '✨', '🏷️', '🧺', '🧴', '🧊', '🌿', '🧂', '🎁', '🛒',
   '🥣', '🍽️', '🫕', '🧃',
@@ -444,6 +435,10 @@ export default function InventoryScreen() {
         : [],
     [selectedItem, transactions]
   );
+  const personalizedQuickItems = useMemo(
+    () => buildQuickInventorySuggestions(transactions, inventory, deletedInventory),
+    [deletedInventory, inventory, transactions]
+  );
 
   const selectedLibraryInfo =
     inventoryViews.find((option) => option.key === selectedLibrary) ?? inventoryViews[0];
@@ -672,17 +667,19 @@ export default function InventoryScreen() {
     setEditingSmartItemId(null);
   }
 
-  function applyQuickItemPreset(preset: (typeof quickItemPresets)[number]) {
+  function applyQuickItemPreset(preset: QuickInventorySuggestion) {
     setName(preset.name);
     setEmoji(preset.emoji);
     setLibrary(preset.library);
     setStorage(preset.storage);
     setUnit(preset.unit);
-    setQuantity('1');
+    setQuantity(String(preset.quantity));
     setPurchaseDate(isoDateFromToday());
     setHasExpiry(true);
     setExpiryDate(isoDateFromToday(preset.shelfDays));
-    setVolumeMl(preset.library === '饮料' ? '500' : '');
+    setVolumeMl(
+      preset.library === '饮料' ? String(preset.volumeMlPerUnit ?? 500) : ''
+    );
     setBarcode('');
     setScanStatus(null);
   }
@@ -1644,30 +1641,46 @@ export default function InventoryScreen() {
             {!editingItemId ? (
               <View style={styles.quickPresetSection}>
                 <View style={styles.quickPresetHeader}>
-                  <Text style={styles.fieldLabel}>{text('常用物品快速填写', 'Quick fill common items')}</Text>
-                  <Text style={styles.quickPresetHint}>{text('点一下再修改数量', 'Tap, then adjust quantity')}</Text>
+                  <Text style={styles.fieldLabel}>{text('为你推荐', 'Suggested for you')}</Text>
+                  <Text style={styles.quickPresetHint}>{text('根据添加习惯排序', 'Based on your habits')}</Text>
                 </View>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.quickPresetList}>
-                  {quickItemPresets.map((preset) => (
-                    <Pressable
-                      key={preset.name}
-                      accessibilityRole="button"
-                      accessibilityLabel={text(
-                        `快速填写${preset.name}`,
-                        `Quick fill ${localizeContent(preset.name, 'en')}`
+                {personalizedQuickItems.length > 0 ? (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.quickPresetList}>
+                    {personalizedQuickItems.map((preset) => (
+                      <Pressable
+                        key={`${preset.name}-${preset.unit}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={text(
+                          `快速填写${preset.name}，常用数量${formatAmount(formatQuantity(preset.quantity), preset.unit, language)}`,
+                          `Quick fill ${localizeContent(preset.name, 'en')}, usual amount ${formatAmount(formatQuantity(preset.quantity), preset.unit, 'en')}`
+                        )}
+                        onPress={() => applyQuickItemPreset(preset)}
+                        style={styles.quickPresetChip}>
+                        <Text style={styles.quickPresetEmoji}>{preset.emoji}</Text>
+                        <View style={styles.quickPresetCopy}>
+                          <Text style={styles.quickPresetName}>
+                            {localizeContent(preset.name, language)}
+                          </Text>
+                          <Text style={styles.quickPresetAmount}>
+                            {formatAmount(formatQuantity(preset.quantity), preset.unit, language)}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <View style={styles.quickPresetEmpty}>
+                    <Text style={styles.quickPresetEmptyText}>
+                      {text(
+                        '添加几次物品后，这里会学习你的常用品和惯用数量。',
+                        'Your frequent items and usual amounts will appear after a few additions.'
                       )}
-                      onPress={() => applyQuickItemPreset(preset)}
-                      style={styles.quickPresetChip}>
-                      <Text style={styles.quickPresetEmoji}>{preset.emoji}</Text>
-                      <Text style={styles.quickPresetName}>
-                        {localizeContent(preset.name, language)}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
+                    </Text>
+                  </View>
+                )}
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={text('扫描商品条形码', 'Scan a product barcode')}
@@ -3266,24 +3279,28 @@ const styles = StyleSheet.create({
   detailDoneText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
   modalCancel: { color: Colors.light.textSecondary, fontSize: 16, fontWeight: '600' },
   modalEdit: { color: Colors.light.primary, fontSize: 16, fontWeight: '800' },
-  modalTitle: { color: Colors.light.text, fontSize: 17, fontWeight: '800' },
+  modalTitle: { color: Colors.light.text, fontSize: 19, fontWeight: '800' },
   modalSave: { color: Colors.light.primary, fontSize: 16, fontWeight: '800' },
   modalSaveDisabled: { opacity: 0.35 },
   form: { padding: 22, gap: 13 },
   quickPresetSection: { gap: 9, marginBottom: 2 },
   quickPresetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  quickPresetHint: { color: Colors.light.textSecondary, fontSize: 9.5 },
+  quickPresetHint: { color: Colors.light.textSecondary, fontSize: 10.5 },
   quickPresetList: { gap: 8, paddingRight: 8 },
-  quickPresetChip: { minWidth: 88, minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 12, borderRadius: 16, backgroundColor: Colors.light.primarySoft },
+  quickPresetChip: { minWidth: 104, minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12, borderRadius: 16, backgroundColor: Colors.light.primarySoft },
   quickPresetEmoji: { fontSize: 20 },
-  quickPresetName: { color: Colors.light.primary, fontSize: 11, fontWeight: '900' },
+  quickPresetCopy: { gap: 2 },
+  quickPresetName: { color: Colors.light.primary, fontSize: 13, fontWeight: '900' },
+  quickPresetAmount: { color: Colors.light.textSecondary, fontSize: 10.5, fontWeight: '700' },
+  quickPresetEmpty: { minHeight: 54, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16, backgroundColor: Colors.light.backgroundElement },
+  quickPresetEmptyText: { color: Colors.light.textSecondary, fontSize: 11.5, lineHeight: 17 },
   scanBarcodeButton: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 13, borderRadius: 17, borderWidth: 1, borderColor: '#B7DCC5', backgroundColor: Colors.light.primarySoft },
   scanBarcodeCopy: { flex: 1, gap: 3 },
-  scanBarcodeTitle: { color: Colors.light.primary, fontSize: 12, fontWeight: '900' },
+  scanBarcodeTitle: { color: Colors.light.primary, fontSize: 14, fontWeight: '900' },
   scanBarcodeText: { color: Colors.light.textSecondary, fontSize: 9.5 },
   scanBarcodeChevron: { color: Colors.light.primary, fontSize: 22 },
   scanStatus: { color: Colors.light.primary, fontSize: 10.5, lineHeight: 16, fontWeight: '700' },
-  fieldLabel: { color: Colors.light.text, fontSize: 13, fontWeight: '800', marginTop: 4 },
+  fieldLabel: { color: Colors.light.text, fontSize: 15, fontWeight: '800', marginTop: 4 },
   input: {
     minHeight: 52,
     borderRadius: 14,
@@ -3413,7 +3430,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.4,
   },
-  shelfSuggestionTitle: { color: Colors.light.text, fontSize: 14, fontWeight: '800' },
+  shelfSuggestionTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '800' },
   shelfSuggestionResult: { gap: 5 },
   shelfSuggestionRange: { color: Colors.light.primary, fontSize: 20, fontWeight: '900' },
   shelfSuggestionNote: { color: Colors.light.textSecondary, fontSize: 11, lineHeight: 17 },
@@ -3731,7 +3748,7 @@ const styles = StyleSheet.create({
   addModeBackdrop: { flex: 1, alignItems: 'flex-end', paddingHorizontal: 14, backgroundColor: '#16221C38' },
   addModeSheet: { width: 286, gap: 8, padding: 11, borderRadius: 22, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: '#FFFFFF', shadowColor: '#173D2F', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 24, elevation: 8 },
   addModeHandle: { width: 42, height: 4, alignSelf: 'center', borderRadius: 2, backgroundColor: Colors.light.border, marginBottom: 3 },
-  addModeTitle: { color: Colors.light.text, fontSize: 14, fontWeight: '900', paddingHorizontal: 5, paddingTop: 2, paddingBottom: 1 },
+  addModeTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '900', paddingHorizontal: 5, paddingTop: 2, paddingBottom: 1 },
   addModeSubtitle: { color: Colors.light.textSecondary, fontSize: 11.5, marginBottom: 3 },
   addModeOption: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 16, backgroundColor: Colors.light.background, borderWidth: 1, borderColor: Colors.light.border },
   addModeOptionAi: { backgroundColor: '#F5F1FF', borderColor: '#D7CBF2' },
@@ -3740,7 +3757,7 @@ const styles = StyleSheet.create({
   addModeIconText: { color: Colors.light.primary, fontSize: 25, fontWeight: '700' },
   addModeAiIcon: { color: '#FFFFFF', fontSize: 20, fontWeight: '900' },
   addModeCopy: { flex: 1, gap: 4 },
-  addModeOptionTitle: { color: Colors.light.text, fontSize: 14, fontWeight: '900' },
+  addModeOptionTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '900' },
   addModeOptionText: { color: Colors.light.textSecondary, fontSize: 10.5, lineHeight: 15 },
   addModeChevron: { color: Colors.light.textSecondary, fontSize: 24 },
   smartHeaderPlaceholder: { width: 46 },
@@ -3759,12 +3776,12 @@ const styles = StyleSheet.create({
   receiptSection: { gap: 11 },
   receiptEmptyCard: { minHeight: 174, alignItems: 'center', justifyContent: 'center', gap: 7, padding: 22, borderRadius: 21, backgroundColor: Colors.light.surface, borderWidth: 1, borderStyle: 'dashed', borderColor: '#BBAFD0' },
   receiptEmptyEmoji: { fontSize: 39 },
-  receiptEmptyTitle: { color: Colors.light.text, fontSize: 14, fontWeight: '900' },
+  receiptEmptyTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '900' },
   receiptEmptyText: { maxWidth: 290, color: Colors.light.textSecondary, fontSize: 10, lineHeight: 15, textAlign: 'center' },
   receiptPreviewCard: { minHeight: 122, flexDirection: 'row', alignItems: 'center', gap: 11, padding: 11, borderRadius: 21, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   receiptPreview: { width: 74, height: 100, borderRadius: 13, backgroundColor: Colors.light.backgroundElement },
   receiptPreviewCopy: { flex: 1, gap: 5 },
-  receiptPreviewTitle: { color: Colors.light.text, fontSize: 13, fontWeight: '900' },
+  receiptPreviewTitle: { color: Colors.light.text, fontSize: 15, fontWeight: '900' },
   receiptPreviewText: { color: Colors.light.textSecondary, fontSize: 9.5, lineHeight: 14 },
   receiptRemoveButton: { width: 31, height: 31, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: Colors.light.backgroundElement },
   receiptRemoveText: { color: Colors.light.danger, fontSize: 19, lineHeight: 21 },
@@ -3778,7 +3795,7 @@ const styles = StyleSheet.create({
   smartAnalyzeButtonText: { color: '#FFFFFF', fontSize: 13.5, fontWeight: '900' },
   smartResultSection: { gap: 12 },
   smartResultHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  smartResultTitle: { color: Colors.light.text, fontSize: 17, fontWeight: '900' },
+  smartResultTitle: { color: Colors.light.text, fontSize: 19, fontWeight: '900' },
   smartResultHint: { color: Colors.light.textSecondary, fontSize: 9.5, marginTop: 3 },
   smartSelectedCount: { color: '#735C9B', fontSize: 12, fontWeight: '900' },
   smartItemList: { gap: 8 },
@@ -3787,7 +3804,7 @@ const styles = StyleSheet.create({
   smartItemMainRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   smartItemEmoji: { width: 38, fontSize: 27, textAlign: 'center' },
   smartItemCopy: { flex: 1, gap: 3 },
-  smartItemName: { color: Colors.light.text, fontSize: 13, fontWeight: '900' },
+  smartItemName: { color: Colors.light.text, fontSize: 15, fontWeight: '900' },
   smartItemMeta: { color: Colors.light.textSecondary, fontSize: 9.5 },
   smartItemAmount: { color: Colors.light.text, fontSize: 11, fontWeight: '900' },
   smartEditButton: { width: 27, height: 27, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: '#ECE5F7' },
