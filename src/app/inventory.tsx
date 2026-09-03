@@ -37,6 +37,7 @@ import { StorageCelebration } from '@/components/storage-celebration';
 import { Colors, Spacing } from '@/constants/theme';
 import { useKitchen } from '@/context/kitchen-context';
 import { useLanguage, type AppLanguage } from '@/context/language-context';
+import { formatBadgeCount } from '@/data/badge-utils';
 import { formatAmount, localizeContent } from '@/data/content-translations';
 import {
   daysUntilDate,
@@ -439,6 +440,11 @@ export default function InventoryScreen() {
     () => buildQuickInventorySuggestions(transactions, inventory, deletedInventory),
     [deletedInventory, inventory, transactions]
   );
+  const pendingShoppingCount = useMemo(
+    () => shoppingList.filter((item) => !item.checked).length,
+    [shoppingList]
+  );
+  const shoppingBadgeLabel = formatBadgeCount(pendingShoppingCount);
 
   const selectedLibraryInfo =
     inventoryViews.find((option) => option.key === selectedLibrary) ?? inventoryViews[0];
@@ -979,13 +985,13 @@ export default function InventoryScreen() {
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={text(`打开购物清单，${shoppingList.filter((item) => !item.checked).length}项待购买`, `Open shopping list, ${shoppingList.filter((item) => !item.checked).length} items to buy`)}
+              accessibilityLabel={text(`打开购物清单，${pendingShoppingCount}项待购买`, `Open shopping list, ${pendingShoppingCount} items to buy`)}
               onPress={() => setIsShoppingListOpen(true)}
               style={({ pressed }) => [styles.shoppingButton, pressed && styles.pressed]}>
               <Text style={styles.shoppingButtonIcon}>🛒</Text>
-              {shoppingList.some((item) => !item.checked) ? (
+              {shoppingBadgeLabel ? (
                 <View style={styles.shoppingBadge}>
-                  <Text style={styles.shoppingBadgeText}>{shoppingList.filter((item) => !item.checked).length}</Text>
+                  <Text style={styles.shoppingBadgeText}>{shoppingBadgeLabel}</Text>
                 </View>
               ) : null}
             </Pressable>
