@@ -40,7 +40,7 @@ npx expo start
 3. 在 Supabase Authentication 中启用 Email provider；把 `http://localhost:8082/**`、`pantrychef://**` 和开发期的 `exp://**` 加入 Redirect URLs。
 4. 重启 Expo 开发服务器，在“我的 → 创建账号”中注册，然后创建家庭或使用邀请码加入。
 
-没有配置 Supabase 时，全部本地功能仍然可以正常使用。
+注意：当前版本要求登录并加入一个家庭后才能进入 App（见 `src/components/app-access-gate.tsx`）。没有配置 Supabase 时只会显示账号页，无法使用本地功能。数据库变更流程见 `supabase/README.md`。
 
 ## 两人安装到 iPhone 主屏幕
 
