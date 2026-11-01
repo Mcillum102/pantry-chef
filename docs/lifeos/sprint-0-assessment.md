@@ -91,6 +91,11 @@
 - 每个 Sprint 独立提交、推送到指定分支，等待你确认后再进行下一阶段。
 
 ## 10. 执行记录（2026-11-01）
-- **生产库只读检查：未完成。** Supabase 项目 `Fresh Pantry App`（ref `grkvvxaetycrdcfjybrx`，us-west-2，Postgres 17）当前状态为 **INACTIVE（已暂停）**，无法查询。恢复项目属于写操作，需用户在 Supabase Dashboard 自行恢复后再做比对。注意：项目暂停期间，线上 App 的登录与同步不可用。
+- **生产库只读检查：已完成（项目恢复后，仅 SELECT）。**
+  - 结构与 `migrations/20261101000000_baseline.sql` 一致：4 张表、全部启用 RLS，6 条策略，2 个 private 与 10 个 public SECURITY DEFINER 函数，函数只授权给 `authenticated`，`household_snapshots` 已加入 realtime。没有 migration 历史（`list_migrations` 为空），与“手动执行 schema.sql”一致。
+  - 实际数据：1 个用户、1 个家庭、1 份快照（payload 约 1.3KB），0 个邀请。说明线上几乎只有测试数据，LifeOS 迁移和健康数据拆分的数据风险都很低。
+  - 基线之外的对象：`public.rls_auto_enable()` + 事件触发器 `ensure_rls`，是 Supabase 自动为 public 新表开启 RLS 的机制，无害，保留。
+  - 小问题：`authenticated` 还有 Supabase 默认的 `TRUNCATE/TRIGGER/REFERENCES` 表权限（`schema.sql` 只授予了 SELECT，没有回收其他权限）。PostgREST 不暴露 TRUNCATE，目前无法通过 API 利用；会在第一个 LifeOS migration 中一并 `revoke`。
+- **防暂停：** 新增 `.github/workflows/supabase-keepalive.yml`，每 3 天用 publishable key 请求一次 REST API（匿名无表权限，不返回数据）。需在 GitHub 仓库 Secrets 中配置 `SUPABASE_URL`、`SUPABASE_PUBLISHABLE_KEY`。
 - **AI 接口登录校验：已完成。** `src/services/ai-auth-server.ts` 的 `rejectUnauthenticated()` 用 Supabase `auth.getUser(token)` 校验调用者；两个 `/ai/*` 路由在调用 OpenAI 前先检查；客户端经 `src/services/ai-auth-client.ts` 自动携带当前会话 token。未登录或 token 无效 → 401。行内文本录入在 AI 失败时仍会回退到本地解析。
   - 验证：`npm test`（25/25）、`tsc`、`lint` 通过；对 `expo export --platform web` 产物直接调用两个路由的 `POST`，无 token / 无效 token 均返回 401。有效 token 的成功路径需在项目恢复后实测。
