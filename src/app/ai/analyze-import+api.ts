@@ -1,4 +1,5 @@
 import { AI_RECIPE_CATEGORIES } from '@/data/recipe-ai';
+import { rejectUnauthenticated } from '@/services/ai-auth-server';
 
 const inventorySchema = {
   type: 'object', additionalProperties: false,
@@ -66,6 +67,8 @@ function extractText(payload: unknown) {
 
 export async function POST(request: Request) {
   if (!process.env.OPENAI_API_KEY) return Response.json({ error: 'AI is not configured' }, { status: 503 });
+  const unauthorized = await rejectUnauthenticated(request);
+  if (unauthorized) return unauthorized;
   let body: { mode?: string; text?: string; imageDataUrl?: string; url?: string };
   try {
     body = await request.json();

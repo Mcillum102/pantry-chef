@@ -89,3 +89,8 @@
 - Sprint 0：`npm test`、`npx tsc --noEmit`、`npm run lint` 全部记录；CI 在 PR 上跑绿。
 - Sprint 1：上述三项 + 新路由测试；`npx expo start --web` 用 Playwright 在 390px 与 1440px 宽度截图验证底部 Tab / 侧边栏；逐一打开 `/inventory /recipes /recommend /planner /insights /profile /account /widgets /preferences` 确认可达；Expo Go 上验证原生 Tab 与烹饪通知跳转 `/recipes`。
 - 每个 Sprint 独立提交、推送到指定分支，等待你确认后再进行下一阶段。
+
+## 10. 执行记录（2026-11-01）
+- **生产库只读检查：未完成。** Supabase 项目 `Fresh Pantry App`（ref `grkvvxaetycrdcfjybrx`，us-west-2，Postgres 17）当前状态为 **INACTIVE（已暂停）**，无法查询。恢复项目属于写操作，需用户在 Supabase Dashboard 自行恢复后再做比对。注意：项目暂停期间，线上 App 的登录与同步不可用。
+- **AI 接口登录校验：已完成。** `src/services/ai-auth-server.ts` 的 `rejectUnauthenticated()` 用 Supabase `auth.getUser(token)` 校验调用者；两个 `/ai/*` 路由在调用 OpenAI 前先检查；客户端经 `src/services/ai-auth-client.ts` 自动携带当前会话 token。未登录或 token 无效 → 401。行内文本录入在 AI 失败时仍会回退到本地解析。
+  - 验证：`npm test`（25/25）、`tsc`、`lint` 通过；对 `expo export --platform web` 产物直接调用两个路由的 `POST`，无 token / 无效 token 均返回 401。有效 token 的成功路径需在项目恢复后实测。

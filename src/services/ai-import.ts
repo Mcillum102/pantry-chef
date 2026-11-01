@@ -3,6 +3,7 @@ import {
   type ImportedRecipe,
   type SmartInventoryItem,
 } from '@/data/ai-import';
+import { aiRequestHeaders } from '@/services/ai-auth-client';
 
 type AnalyzeResponse<T> = { result: T; source: 'openai' | 'local' };
 
@@ -12,7 +13,7 @@ async function postAnalysis<T>(body: unknown, timeoutMs = 35_000): Promise<Analy
   try {
     const response = await fetch('/ai/analyze-import', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await aiRequestHeaders(),
       body: JSON.stringify(body),
       signal: controller.signal,
     });

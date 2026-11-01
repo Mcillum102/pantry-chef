@@ -4,6 +4,7 @@ import {
   type RecipeClassification,
   type RecipeForOrganization,
 } from '@/data/recipe-ai';
+import { rejectUnauthenticated } from '@/services/ai-auth-server';
 
 const MAX_RECIPES = 50;
 
@@ -45,6 +46,8 @@ export async function POST(request: Request) {
   if (!apiKey) {
     return Response.json({ error: 'AI service is not configured' }, { status: 503 });
   }
+  const unauthorized = await rejectUnauthenticated(request);
+  if (unauthorized) return unauthorized;
 
   let body: unknown;
   try {

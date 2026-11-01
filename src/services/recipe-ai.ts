@@ -4,6 +4,7 @@ import {
   type RecipeForOrganization,
   type RecipeOrganizationResult,
 } from '@/data/recipe-ai';
+import { aiRequestHeaders } from '@/services/ai-auth-client';
 
 const REQUEST_TIMEOUT_MS = 20_000;
 
@@ -18,7 +19,7 @@ export async function organizeRecipesWithAI(
   try {
     const response = await fetch('/ai/organize-recipes', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await aiRequestHeaders(),
       body: JSON.stringify({ recipes }),
       signal: controller.signal,
     });
