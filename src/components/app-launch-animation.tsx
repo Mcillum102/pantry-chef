@@ -215,10 +215,10 @@ const styles = StyleSheet.create({
   title: {
     color: '#245B42',
     fontSize: 34,
-    fontWeight: '800',
+    fontWeight: '600',
     letterSpacing: 5,
   },
   taglineRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   taglineLine: { width: 22, height: 1, backgroundColor: '#7CA78E' },
-  tagline: { color: '#5F776A', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  tagline: { color: '#5F776A', fontSize: 11, fontWeight: '500', letterSpacing: 1 },
 });

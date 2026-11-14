@@ -41,6 +41,6 @@ const styles = StyleSheet.create({
   conflictPill: { borderColor: '#E8C37B', backgroundColor: '#FFF8EAF5' },
   failedPill: { borderColor: '#CAD7E2', backgroundColor: '#F6FAFDF5' },
   icon: { fontSize: 16 },
-  label: { flexShrink: 1, color: Colors.light.text, fontSize: 11, fontWeight: '800' },
-  action: { color: Colors.light.primary, fontSize: 10, fontWeight: '800' },
+  label: { flexShrink: 1, color: Colors.light.text, fontSize: 11, fontWeight: '600' },
+  action: { color: Colors.light.primary, fontSize: 10, fontWeight: '600' },
 });

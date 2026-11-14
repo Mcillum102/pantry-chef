@@ -112,17 +112,20 @@ export function AppScreen({ eyebrow, title, subtitle, action, children }: AppScr
         ]}>
         <View nativeID="app-screen-content" style={styles.inner}>
           <Animated.View style={[styles.header, headerAnimatedStyle]}>
-            <View style={styles.headerCopy}>
-              {eyebrow ? (
-                <View style={styles.eyebrowPill}>
-                  <View style={styles.eyebrowDot} />
-                  <Text style={styles.eyebrow}>{eyebrow}</Text>
-                </View>
-              ) : null}
-              {typeof title === 'string' ? <Text style={[styles.title, DisplayText]}>{title}</Text> : title}
-              {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+            {eyebrow ? (
+              <View style={styles.eyebrowPill}>
+                <View style={styles.eyebrowDot} />
+                <Text style={styles.eyebrow}>{eyebrow}</Text>
+              </View>
+            ) : null}
+            {/* 按钮和大标题同一行、垂直居中；副标题单独占一整行，不会被按钮挤窄 */}
+            <View style={styles.titleRow}>
+              <View style={styles.titleWrap}>
+                {typeof title === 'string' ? <Text style={[styles.title, DisplayText]} numberOfLines={1}>{title}</Text> : title}
+              </View>
+              {action ? <View style={styles.actions}>{action}</View> : null}
             </View>
-            {action}
+            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           </Animated.View>
           <View style={styles.sections}>
             {screenChildren.map((child, index) => (
@@ -173,15 +176,23 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: Spacing.three,
+    gap: 6,
     paddingTop: 6,
   },
-  headerCopy: {
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+  },
+  titleWrap: {
     flex: 1,
-    gap: 6,
+    minWidth: 0,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   eyebrowPill: {
     alignSelf: 'flex-start',
@@ -205,7 +216,7 @@ const styles = StyleSheet.create({
   eyebrow: {
     color: Colors.light.primary,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '500',
     letterSpacing: 0.3,
   },
   title: {
@@ -231,6 +242,6 @@ const styles = StyleSheet.create({
   sectionDetail: {
     color: Colors.light.textSecondary,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '500',
   },
 });

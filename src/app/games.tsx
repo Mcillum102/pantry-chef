@@ -82,9 +82,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.light.border,
   },
   gameEmoji: { fontSize: 34 },
-  gameName: { color: Colors.light.text, fontSize: 16, fontWeight: '800' },
+  gameName: { color: Colors.light.text, fontSize: 16, fontWeight: '600' },
   gameDescription: { color: Colors.light.textSecondary, fontSize: 12, lineHeight: 17 },
-  comingSoon: { marginTop: 'auto', color: Colors.light.primary, fontSize: 11, fontWeight: '800' },
+  comingSoon: { marginTop: 'auto', color: Colors.light.primary, fontSize: 11, fontWeight: '600' },
   disabled: { opacity: 0.6 },
   pressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
 });

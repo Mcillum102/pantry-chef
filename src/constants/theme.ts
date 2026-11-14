@@ -48,43 +48,40 @@ export const Gradients = {
   aurora: { mint: '#BFE6CF', peach: '#FFD8BC', butter: '#FFEFB5', sky: '#CFE6F5' },
 } as const;
 
-/**
- * 字体
- * - ui：全局界面文字（Web 上由 src/global.css 统一应用到所有 Text）
- * - display：页面大标题、分区标题等，用霞鹜文楷（只有常规字重，使用时 fontWeight 要设为 '400'）
- * Web 字体在 src/app/+html.tsx 里加载；原生端暂时使用系统字体。
- */
 export const Fonts = Platform.select({
   ios: {
+    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: 'system-ui',
+    /** iOS `UIFontDescriptorSystemDesignSerif` */
     serif: 'ui-serif',
+    /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: 'ui-rounded',
+    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: 'ui-monospace',
-    ui: undefined,
-    display: undefined,
   },
   default: {
     sans: 'normal',
     serif: 'serif',
     rounded: 'normal',
     mono: 'monospace',
-    ui: undefined,
-    display: undefined,
   },
   web: {
     sans: 'var(--font-ui)',
     serif: 'var(--font-serif)',
     rounded: 'var(--font-rounded)',
     mono: 'var(--font-mono)',
-    ui: 'var(--font-ui)',
-    display: 'var(--font-display)',
   },
 });
 
-/** 标题用的文字样式。注意：要以内联对象传入（不要放进 StyleSheet.create），Web 上才能覆盖全局字体 */
-export const DisplayText = Fonts.display
-  ? { fontFamily: Fonts.display, fontWeight: '400' as const, letterSpacing: 0.2 }
-  : { fontWeight: '800' as const };
+/** 页面大标题、分区标题的统一样式（系统字体，中粗，略收紧字距） */
+export const DisplayText = { fontWeight: '500' as const, letterSpacing: -0.3 };
+
+/** 页面右上角的圆形按钮：统一 44px。primary 是主操作（绿底），secondary 是次要操作（白底） */
+export const HeaderButton = {
+  base: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  primary: { backgroundColor: '#2E6B4F', boxShadow: '0 8px 20px rgba(46, 107, 79, 0.28)' },
+  secondary: { backgroundColor: '#FFFFFF', boxShadow: '0 1px 2px rgba(30, 36, 32, 0.05), 0 6px 16px rgba(30, 36, 32, 0.08)' },
+} as const;
 
 export const Radius = { sm: 12, md: 18, lg: 24, xl: 30, pill: 999 } as const;
 

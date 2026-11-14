@@ -366,12 +366,12 @@ const styles = StyleSheet.create({
     color: INACTIVE,
     fontSize: 10.5,
     lineHeight: 13,
-    fontWeight: '700',
+    fontWeight: '500',
     letterSpacing: 0.1,
   },
   selectedLabel: {
     color: '#FFFFFF',
-    fontWeight: '800',
+    fontWeight: '600',
   },
   hiddenTab: {
     display: 'none',

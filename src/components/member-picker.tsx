@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     backgroundColor: Colors.light.primarySoft,
   },
-  choiceCtaText: { color: Colors.light.primary, fontSize: 12, fontWeight: '700' },
-  choiceArrow: { color: Colors.light.primary, fontSize: 13, fontWeight: '800' },
+  choiceCtaText: { color: Colors.light.primary, fontSize: 12, fontWeight: '500' },
+  choiceArrow: { color: Colors.light.primary, fontSize: 13, fontWeight: '600' },
   hint: { color: Colors.light.textSecondary, fontSize: 12.5 },
 });

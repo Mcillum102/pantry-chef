@@ -115,10 +115,10 @@ const styles = StyleSheet.create({
   inputShellError: { borderColor: '#E3A497' },
   inputIcon: { fontSize: 18 },
   input: { flex: 1, minHeight: 54, color: Colors.light.text, fontSize: 17, outlineStyle: 'none' } as never,
-  error: { color: Colors.light.danger, fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  error: { color: Colors.light.danger, fontSize: 13, fontWeight: '500', textAlign: 'center' },
   buttonWrap: { borderRadius: Radius.lg, boxShadow: Shadows.glow },
   button: { minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.lg },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 1 },
+  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', letterSpacing: 1 },
   disabled: { opacity: 0.45 },
   pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
 });
