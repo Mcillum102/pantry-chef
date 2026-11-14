@@ -73,8 +73,8 @@ export const Fonts = Platform.select({
   },
 });
 
-/** 页面大标题、分区标题的统一样式（系统字体，中粗，略收紧字距） */
-export const DisplayText = { fontWeight: '500' as const, letterSpacing: -0.3 };
+/** 页面大标题、分区标题的统一样式：系统字体（苹方）中粗、字距略紧，和「菜谱库」标题一致 */
+export const DisplayText = { fontWeight: '600' as const, letterSpacing: -0.6 };
 
 /** 页面右上角的圆形按钮：统一 44px。primary 是主操作（绿底），secondary 是次要操作（白底） */
 export const HeaderButton = {

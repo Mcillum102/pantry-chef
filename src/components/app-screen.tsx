@@ -221,8 +221,8 @@ const styles = StyleSheet.create({
   },
   title: {
     color: Colors.light.text,
-    fontSize: 36,
-    lineHeight: 46,
+    fontSize: 32,
+    lineHeight: 40,
   },
   subtitle: {
     color: Colors.light.textSecondary,
