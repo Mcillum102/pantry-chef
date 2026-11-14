@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   title: {
     color: '#245B42',
     fontSize: 34,
-    fontWeight: '900',
+    fontWeight: '800',
     letterSpacing: 5,
   },
   taglineRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },

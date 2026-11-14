@@ -42,5 +42,5 @@ const styles = StyleSheet.create({
   failedPill: { borderColor: '#CAD7E2', backgroundColor: '#F6FAFDF5' },
   icon: { fontSize: 16 },
   label: { flexShrink: 1, color: Colors.light.text, fontSize: 11, fontWeight: '800' },
-  action: { color: Colors.light.primary, fontSize: 10, fontWeight: '900' },
+  action: { color: Colors.light.primary, fontSize: 10, fontWeight: '800' },
 });

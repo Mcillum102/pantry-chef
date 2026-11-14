@@ -3,8 +3,10 @@ import { useRouter } from 'expo-router';
 import { Children, isValidElement, useMemo, useState, type PropsWithChildren } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { CountUp } from '@/components/count-up';
+import { GradientSurface } from '@/components/gradient-surface';
 import { AppScreen, SectionHeader } from '@/components/app-screen';
-import { Colors } from '@/constants/theme';
+import { Colors, DisplayText, Shadows } from '@/constants/theme';
 import { localDateKey, useHealth } from '@/context/health-context';
 import { useKitchen } from '@/context/kitchen-context';
 import { useLanguage } from '@/context/language-context';
@@ -87,7 +89,7 @@ function SummaryCard({
         <MaterialCommunityIcons name={icon} size={21} color={color} />
       </View>
       <Text style={styles.summaryLabel}>{label}</Text>
-      <Text style={[styles.summaryValue, { color }]}>{value}</Text>
+      <CountUp style={[styles.summaryValue, { color }]} value={value} />
       <Text style={styles.summaryDetail} numberOfLines={1}>{detail}</Text>
     </Pressable>
   );
@@ -271,16 +273,14 @@ export default function HomeScreen() {
       }>
       <OrderedHomeSections preferences={normalizedHomeSections}>
       <HomeSection id="hero">
-      <View style={styles.heroCard}>
-        <View style={styles.heroDecorationLarge} />
-        <View style={styles.heroDecorationSmall} />
+      <GradientSurface style={styles.heroCard}>
         <View style={styles.heroTopRow}>
           <View style={styles.heroBadge}>
             <Text style={styles.heroBadgeText}>{text('今日摘要', 'TODAY')}</Text>
           </View>
           <Text style={styles.heroEmoji}>🌿</Text>
         </View>
-        <Text style={styles.heroTitle}>
+        <Text style={[styles.heroTitle, DisplayText]}>
           {mostUrgentItem
             ? text(`先用掉「${mostUrgentItem.name}」吧`, `Use ${localizeContent(mostUrgentItem.name, 'en')} first`)
             : text('今天的库存状态很轻松', 'Your pantry looks good today')}
@@ -295,21 +295,21 @@ export default function HomeScreen() {
         </Text>
         <View style={styles.heroFooter}>
           <View style={styles.heroMiniStat}>
-            <Text style={styles.heroMiniValue}>{activeInventory.length}</Text>
+            <CountUp style={styles.heroMiniValue} value={activeInventory.length} />
             <Text style={styles.heroMiniLabel}>{text('项库存', 'in stock')}</Text>
           </View>
           <View style={styles.heroDivider} />
           <View style={styles.heroMiniStat}>
-            <Text style={styles.heroMiniValue}>{mainMealCount}/3</Text>
+            <CountUp style={styles.heroMiniValue} value={`${mainMealCount}/3`} />
             <Text style={styles.heroMiniLabel}>{text('今日三餐', 'meals')}</Text>
           </View>
           <View style={styles.heroDivider} />
           <View style={styles.heroMiniStat}>
-            <Text style={styles.heroMiniValue}>{completedToday}</Text>
+            <CountUp style={styles.heroMiniValue} value={completedToday} />
             <Text style={styles.heroMiniLabel}>{text('今日完成', 'cooked')}</Text>
           </View>
         </View>
-      </View>
+      </GradientSurface>
       </HomeSection>
 
       <HomeSection id="brief">
@@ -659,19 +659,19 @@ const styles = StyleSheet.create({
   savingsFeatureCard: { backgroundColor: '#FFF5E8', borderColor: '#F0DFC7' },
   featureIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', marginBottom: 2, borderRadius: 14, backgroundColor: '#FFFFFFB8' },
   featureEmoji: { fontSize: 23 },
-  featureEyebrow: { color: Colors.light.primary, fontSize: 8, fontWeight: '900', letterSpacing: 0.6 },
-  featureTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '900' },
+  featureEyebrow: { color: Colors.light.primary, fontSize: 8, fontWeight: '800', letterSpacing: 0.6 },
+  featureTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '800' },
   featureText: { flex: 1, color: Colors.light.textSecondary, fontSize: 10, lineHeight: 15 },
   habitCard: { gap: 14, padding: 17, borderRadius: 24, backgroundColor: '#FFF9F4', borderWidth: 1, borderColor: '#EFDED2' },
   habitHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   habitTitleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 11 },
   habitIcon: { width: 43, height: 43, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#FBEAE3' },
   habitTitleCopy: { flex: 1, gap: 2 },
-  habitEyebrow: { color: '#B95E4B', fontSize: 8.5, fontWeight: '900', letterSpacing: 0.7 },
-  habitTitle: { color: Colors.light.text, fontSize: 15, fontWeight: '900' },
+  habitEyebrow: { color: '#B95E4B', fontSize: 8.5, fontWeight: '800', letterSpacing: 0.7 },
+  habitTitle: { color: Colors.light.text, fontSize: 15, fontWeight: '800' },
   habitStats: { minHeight: 66, flexDirection: 'row', alignItems: 'center', paddingVertical: 7, borderRadius: 18, backgroundColor: '#FFFFFFB8' },
   habitStat: { flex: 1, alignItems: 'center', gap: 3 },
-  habitStatValue: { fontSize: 21, fontWeight: '900' },
+  habitStatValue: { fontSize: 21, fontWeight: '800' },
   habitStatLabel: { color: Colors.light.textSecondary, fontSize: 8.5, fontWeight: '800', textAlign: 'center' },
   habitDivider: { width: StyleSheet.hairlineWidth, height: 31, backgroundColor: '#E9D8CC' },
   habitInsight: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
@@ -681,19 +681,19 @@ const styles = StyleSheet.create({
   customizePage: { flex: 1, paddingTop: 12, backgroundColor: Colors.light.background },
   customizeHeader: { minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border },
   customizeReset: { color: Colors.light.textSecondary, fontSize: 14, fontWeight: '700' },
-  customizeTitle: { color: Colors.light.text, fontSize: 17, fontWeight: '900' },
+  customizeTitle: { color: Colors.light.text, fontSize: 17, fontWeight: '800' },
   customizeDone: { minWidth: 58, minHeight: 38, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, borderRadius: 13, backgroundColor: Colors.light.primary },
-  customizeDoneText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
+  customizeDoneText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
   customizeIntro: { flexDirection: 'row', alignItems: 'center', gap: 12, margin: 18, padding: 15, borderRadius: 20, backgroundColor: Colors.light.primarySoft },
   customizeIntroIcon: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: '#FFFFFFA8' },
   customizeIntroCopy: { flex: 1, gap: 3 },
-  customizeIntroTitle: { color: Colors.light.primary, fontSize: 13, fontWeight: '900' },
+  customizeIntroTitle: { color: Colors.light.primary, fontSize: 13, fontWeight: '800' },
   customizeIntroText: { color: Colors.light.textSecondary, fontSize: 10.5, lineHeight: 16 },
   customizeList: { overflow: 'hidden', marginHorizontal: 18, borderRadius: 23, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   customizeRow: { minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border },
   customizeRowIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: Colors.light.backgroundElement },
   customizeRowCopy: { flex: 1, gap: 3 },
-  customizeRowTitle: { color: Colors.light.text, fontSize: 12.5, fontWeight: '900' },
+  customizeRowTitle: { color: Colors.light.text, fontSize: 12.5, fontWeight: '800' },
   customizeRowTitleHidden: { color: Colors.light.textSecondary },
   customizeRowStatus: { color: Colors.light.textSecondary, fontSize: 9.5 },
   customizeRowActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -704,32 +704,11 @@ const styles = StyleSheet.create({
   customizeToggleThumb: { width: 23, height: 23, borderRadius: 12, backgroundColor: Colors.light.surface, boxShadow: '0 2px 5px rgba(0,0,0,0.16)' },
   customizeToggleThumbOn: { alignSelf: 'flex-end' },
   heroCard: {
-    position: 'relative',
-    overflow: 'hidden',
-    minHeight: 238,
+    minHeight: 236,
     padding: 22,
-    gap: 11,
-    borderRadius: 28,
-    backgroundColor: Colors.light.primary,
-    boxShadow: '0 18px 42px rgba(47, 109, 80, 0.22)',
-  },
-  heroDecorationLarge: {
-    position: 'absolute',
-    width: 190,
-    height: 190,
-    right: -52,
-    top: -66,
-    borderRadius: 95,
-    backgroundColor: '#FFFFFF10',
-  },
-  heroDecorationSmall: {
-    position: 'absolute',
-    width: 96,
-    height: 96,
-    right: 58,
-    bottom: -50,
-    borderRadius: 48,
-    backgroundColor: '#FFFFFF0C',
+    gap: 10,
+    borderRadius: 30,
+    boxShadow: Shadows.glow,
   },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   heroBadge: {
@@ -738,10 +717,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#FFFFFF1F',
   },
-  heroBadgeText: { color: '#D8EBDD', fontSize: 10, fontWeight: '900', letterSpacing: 0.9 },
+  heroBadgeText: { color: '#E6F3EA', fontSize: 11, fontWeight: '700', letterSpacing: 0.6 },
   heroEmoji: { fontSize: 29 },
-  heroTitle: { maxWidth: '87%', color: '#FFFFFF', fontSize: 25, lineHeight: 31, fontWeight: '900', letterSpacing: -0.5 },
-  heroText: { maxWidth: '92%', color: '#D8EBDD', fontSize: 13, lineHeight: 20 },
+  heroTitle: { maxWidth: '90%', color: '#FFFFFF', fontSize: 28, lineHeight: 36 },
+  heroText: { maxWidth: '92%', color: '#DDEEE3', fontSize: 14, lineHeight: 21 },
   heroFooter: {
     marginTop: 'auto',
     minHeight: 57,
@@ -749,11 +728,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 14,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF12',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
   },
   heroMiniStat: { flex: 1, alignItems: 'center', gap: 2 },
-  heroMiniValue: { color: '#FFFFFF', fontSize: 18, fontWeight: '900' },
-  heroMiniLabel: { color: '#CDE4D4', fontSize: 9.5, fontWeight: '700' },
+  heroMiniValue: { color: '#FFFFFF', fontSize: 20, fontWeight: '800' },
+  heroMiniLabel: { color: '#CFE6D7', fontSize: 11, fontWeight: '600' },
   heroDivider: { width: 1, height: 28, backgroundColor: '#FFFFFF24' },
   summarySection: { gap: 12 },
   summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -762,14 +743,15 @@ const styles = StyleSheet.create({
     minHeight: 142,
     padding: 14,
     gap: 5,
-    borderRadius: 21,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#FFFFFF',
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    boxShadow: Shadows.card,
   },
   summaryIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 12, marginBottom: 2 },
-  summaryLabel: { color: Colors.light.textSecondary, fontSize: 11, fontWeight: '800' },
-  summaryValue: { fontSize: 26, lineHeight: 31, fontWeight: '900' },
-  summaryDetail: { color: Colors.light.textSecondary, fontSize: 10.5, fontWeight: '600' },
+  summaryLabel: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '700' },
+  summaryValue: { fontSize: 30, lineHeight: 36, fontWeight: '800', letterSpacing: -0.5 },
+  summaryDetail: { color: Colors.light.textSecondary, fontSize: 11.5, fontWeight: '600' },
   progressCard: { gap: 12 },
   progressContent: {
     gap: 10,
@@ -803,8 +785,8 @@ const styles = StyleSheet.create({
   recipeEmojiBox: { width: 68, height: 68, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: '#FFFFFFB8' },
   recipeEmoji: { fontSize: 36 },
   recipeCopy: { flex: 1, gap: 4 },
-  recipeEyebrow: { color: '#A1682D', fontSize: 8.5, fontWeight: '900', letterSpacing: 0.7 },
-  recipeTitle: { color: Colors.light.text, fontSize: 18, fontWeight: '900' },
+  recipeEyebrow: { color: '#A1682D', fontSize: 8.5, fontWeight: '800', letterSpacing: 0.7 },
+  recipeTitle: { color: Colors.light.text, fontSize: 18, fontWeight: '800' },
   recipeMetaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 5 },
   recipeMeta: { color: Colors.light.textSecondary, fontSize: 9.5, fontWeight: '700' },
   recipeMetaDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: '#C7AE8D' },
@@ -816,16 +798,16 @@ const styles = StyleSheet.create({
   expiryEmojiBox: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: Colors.light.backgroundElement },
   expiryEmoji: { fontSize: 24 },
   expiryCopy: { flex: 1, gap: 4 },
-  expiryName: { color: Colors.light.text, fontSize: 14, fontWeight: '900' },
+  expiryName: { color: Colors.light.text, fontSize: 14, fontWeight: '800' },
   expiryMeta: { color: Colors.light.textSecondary, fontSize: 10.5, fontWeight: '600' },
   expiryBadge: { maxWidth: 92, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 9, backgroundColor: Colors.light.warningSoft },
   expiryBadgeUrgent: { backgroundColor: Colors.light.dangerSoft },
-  expiryBadgeText: { color: Colors.light.warning, fontSize: 9, fontWeight: '900', textAlign: 'center' },
+  expiryBadgeText: { color: Colors.light.warning, fontSize: 9, fontWeight: '800', textAlign: 'center' },
   expiryBadgeTextUrgent: { color: Colors.light.danger },
   emptyCard: { flexDirection: 'row', alignItems: 'center', gap: 13, padding: 18, borderRadius: 22, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   emptyEmoji: { fontSize: 29 },
   emptyCopy: { flex: 1, gap: 3 },
-  emptyTitle: { color: Colors.light.text, fontSize: 14, fontWeight: '900' },
+  emptyTitle: { color: Colors.light.text, fontSize: 14, fontWeight: '800' },
   emptyText: { color: Colors.light.textSecondary, fontSize: 11 },
   quickSection: { gap: 12 },
   quickActions: { flexDirection: 'row', gap: 9 },

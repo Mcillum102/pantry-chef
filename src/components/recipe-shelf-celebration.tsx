@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
   shelfFootLeft: { position: 'absolute', left: 29, bottom: -16, width: 24, height: 18, borderRadius: 7, backgroundColor: '#9C633E' },
   shelfFootRight: { position: 'absolute', right: 29, bottom: -16, width: 24, height: 18, borderRadius: 7, backgroundColor: '#9C633E' },
   shelfFace: { position: 'absolute', right: 25, bottom: 28, alignItems: 'center' },
-  shelfFaceText: { color: '#FCE5CA', fontSize: 18, fontWeight: '900' },
+  shelfFaceText: { color: '#FCE5CA', fontSize: 18, fontWeight: '800' },
   shelfBlush: { width: 54, height: 6, borderLeftWidth: 11, borderRightWidth: 11, borderColor: '#E99586', opacity: 0.82 },
   sparkle: { position: 'absolute', zIndex: 5, color: '#FFEBA0', fontSize: 35, textShadowColor: '#FFF3B8', textShadowRadius: 12 },
   sparkleLeft: { left: 18, top: 76 },
@@ -229,6 +229,6 @@ const styles = StyleSheet.create({
   checkCircle: { width: 43, height: 43, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: '#4A9876' },
   checkText: { color: '#FFFFFF', fontSize: 25, fontWeight: '800' },
   successCopy: { flex: 1, gap: 2 },
-  successTitle: { color: '#183E30', fontSize: 14, fontWeight: '900' },
+  successTitle: { color: '#183E30', fontSize: 14, fontWeight: '800' },
   successText: { color: '#6D7C73', fontSize: 11, lineHeight: 16, fontWeight: '700' },
 });

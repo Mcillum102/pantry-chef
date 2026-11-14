@@ -1,12 +1,14 @@
 :root {
+  --font-ui:
+    'Nunito', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', system-ui,
+    sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
   --font-display:
-    Spline Sans, Inter, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji,
-    Segoe UI Symbol, Noto Color Emoji;
+    'LXGW WenKai Screen', 'Kaiti SC', 'STKaiti', 'KaiTi', var(--font-ui);
   --font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
   --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
-  --app-background: #f7f5ef;
+  --app-background: #f6f4ee;
 }
 
 html,
@@ -20,6 +22,19 @@ body,
 
 body {
   overscroll-behavior-y: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* 全局界面字体。react-native-web 把 Text 的默认字体写在 css-text-* 类里，
+   这里用更高的优先级统一换成 --font-ui。
+   图标字体和标题字体（DisplayText）是内联样式，优先级更高，不受影响。 */
+#root [class*='css-text-'],
+#root [class*='css-textHasAncestor-'],
+#root input,
+#root textarea {
+  font-family: var(--font-ui);
 }
 
 #root {

@@ -8,8 +8,18 @@ import {
   type TabListProps,
   type TabTriggerSlotProps,
 } from 'expo-router/ui';
-import { Children, isValidElement, useEffect, type ComponentProps, type ReactElement } from 'react';
-import { Pressable, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  Children,
+  createContext,
+  isValidElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  type ComponentProps,
+  type ReactElement,
+} from 'react';
+import { Pressable, ScrollView, StyleSheet, View, type LayoutRectangle, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   interpolate,
   interpolateColor,
@@ -24,6 +34,11 @@ import { FloatingCookingTimer } from '@/components/floating-cooking-timer';
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
+
+const INACTIVE = '#7A8079';
+
+/** 让选中的按钮自动滚到可见区域 */
+const TabRevealContext = createContext<((frame: LayoutRectangle) => void) | null>(null);
 
 export type AppTabConfig = {
   name: string;
@@ -116,18 +131,47 @@ function CustomTabList({ children, containerStyle, surfaceStyle, nativeID, style
     else scrollable.push(child);
   });
 
+  const scrollRef = useRef<ScrollView>(null);
+  const viewportWidth = useRef(0);
+  const scrollX = useRef(0);
+  const pendingFrame = useRef<LayoutRectangle | null>(null);
+  const reveal = useCallback((frame: LayoutRectangle) => {
+    const width = viewportWidth.current;
+    // 刚挂载时按钮比滚动区先完成测量，先记下来，等滚动区有宽度后再滚
+    if (!width) {
+      pendingFrame.current = frame;
+      return;
+    }
+    const margin = 24;
+    let next = scrollX.current;
+    if (frame.x < scrollX.current + margin) next = frame.x - margin;
+    else if (frame.x + frame.width > scrollX.current + width - margin) next = frame.x + frame.width - width + margin;
+    if (next !== scrollX.current) scrollRef.current?.scrollTo({ x: Math.max(0, next), animated: true });
+  }, []);
+
   return (
     <View {...props} nativeID={nativeID} style={[styles.tabListContainer, containerStyle]}>
       <View style={styles.shadowContainer}>
         <View style={[styles.innerContainer, surfaceStyle]}>
           <View style={styles.glassHighlight} />
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.scrollArea}
-            contentContainerStyle={styles.scrollContent}>
-            {scrollable}
-          </ScrollView>
+          <TabRevealContext.Provider value={reveal}>
+            <ScrollView
+              ref={scrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              onLayout={(event) => {
+                viewportWidth.current = event.nativeEvent.layout.width;
+                const pending = pendingFrame.current;
+                pendingFrame.current = null;
+                if (pending) reveal(pending);
+              }}
+              onScroll={(event) => { scrollX.current = event.nativeEvent.contentOffset.x; }}
+              scrollEventThrottle={32}
+              style={styles.scrollArea}
+              contentContainerStyle={styles.scrollContent}>
+              {scrollable}
+            </ScrollView>
+          </TabRevealContext.Provider>
           <View style={styles.divider} />
           <View style={styles.pinnedArea}>{pinned}</View>
           {hidden}
@@ -154,6 +198,12 @@ export function TabButton({
 }: TabButtonProps) {
   const focusProgress = useSharedValue(isFocused ? 1 : 0);
   const pressScale = useSharedValue(1);
+  const reveal = useContext(TabRevealContext);
+  const frameRef = useRef<LayoutRectangle | null>(null);
+
+  useEffect(() => {
+    if (isFocused && frameRef.current) reveal?.(frameRef.current);
+  }, [isFocused, reveal]);
 
   useEffect(() => {
     focusProgress.set(withSpring(isFocused ? 1 : 0, {
@@ -178,8 +228,8 @@ export function TabButton({
     ],
   }));
   const labelAnimatedStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(focusProgress.value, [0, 1], ['#777B75', Colors.light.primary]),
-    opacity: interpolate(focusProgress.value, [0, 1], [0.82, 1]),
+    color: interpolateColor(focusProgress.value, [0, 1], [INACTIVE, '#FFFFFF']),
+    opacity: interpolate(focusProgress.value, [0, 1], [0.86, 1]),
   }));
   const pressAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pressScale.value }],
@@ -191,6 +241,10 @@ export function TabButton({
       accessibilityRole="tab"
       accessibilityLabel={label}
       accessibilityState={{ selected: Boolean(isFocused) }}
+      onLayout={(event) => {
+        frameRef.current = event.nativeEvent.layout;
+        if (isFocused) reveal?.(event.nativeEvent.layout);
+      }}
       onPressIn={(event) => {
         pressScale.set(withTiming(0.86, { duration: 90, reduceMotion: ReduceMotion.System }));
         onPressIn?.(event);
@@ -211,8 +265,8 @@ export function TabButton({
         <Animated.View style={[styles.tabForeground, iconAnimatedStyle]}>
           <MaterialCommunityIcons
             name={isFocused ? selectedIcon : icon}
-            size={23}
-            color={isFocused ? Colors.light.primary : '#777B75'}
+            size={22}
+            color={isFocused ? '#FFFFFF' : INACTIVE}
           />
         </Animated.View>
         <Animated.Text style={[styles.tabLabel, labelAnimatedStyle, isFocused && styles.selectedLabel]}>
@@ -248,7 +302,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.88)',
-    backgroundColor: 'rgba(244, 245, 241, 0.74)',
+    backgroundColor: 'rgba(250, 249, 245, 0.78)',
     overflow: 'hidden',
   },
   glassHighlight: {
@@ -301,25 +355,23 @@ const styles = StyleSheet.create({
     left: 0,
     pointerEvents: 'none',
     borderRadius: 25,
-    backgroundColor: 'rgba(255, 255, 255, 0.72)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.92)',
-    boxShadow: '0 3px 10px rgba(42, 72, 55, 0.10)',
+    backgroundColor: Colors.light.primary,
+    boxShadow: '0 6px 16px rgba(46, 107, 79, 0.32)',
   },
   tabForeground: {
     zIndex: 1,
   },
   tabLabel: {
     zIndex: 1,
-    color: '#777B75',
+    color: INACTIVE,
     fontSize: 10.5,
     lineHeight: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: 0.1,
   },
   selectedLabel: {
-    color: Colors.light.primary,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
   hiddenTab: {
     display: 'none',

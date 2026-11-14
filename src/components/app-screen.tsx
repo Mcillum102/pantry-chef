@@ -1,12 +1,13 @@
 import { Children, useCallback, type PropsWithChildren, type ReactNode } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
   Extrapolation,
   interpolate,
   ReduceMotion,
+  useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -14,7 +15,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { AuroraBackdrop } from '@/components/aurora-backdrop';
+import { Colors, DisplayText, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 
 type AppScreenProps = PropsWithChildren<{
   eyebrow?: string;
@@ -48,6 +50,10 @@ function AnimatedScreenSection({
 export function AppScreen({ eyebrow, title, subtitle, action, children }: AppScreenProps) {
   const insets = useSafeAreaInsets();
   const entranceProgress = useSharedValue(0);
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
   const screenChildren = Children.toArray(children);
 
   useFocusEffect(
@@ -68,15 +74,14 @@ export function AppScreen({ eyebrow, title, subtitle, action, children }: AppScr
   );
 
   const headerAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(entranceProgress.value, [0, 0.34], [0, 1], Extrapolation.CLAMP),
+    opacity:
+      interpolate(entranceProgress.value, [0, 0.34], [0, 1], Extrapolation.CLAMP)
+      * interpolate(scrollY.value, [0, 110], [1, 0.15], Extrapolation.CLAMP),
     transform: [
       {
-        translateY: interpolate(
-          entranceProgress.value,
-          [0, 0.44],
-          [14, 0],
-          Extrapolation.CLAMP
-        ),
+        translateY:
+          interpolate(entranceProgress.value, [0, 0.44], [14, 0], Extrapolation.CLAMP)
+          + interpolate(scrollY.value, [-120, 0, 160], [-24, 0, 38], Extrapolation.CLAMP),
       },
       {
         scale: interpolate(
@@ -90,96 +95,128 @@ export function AppScreen({ eyebrow, title, subtitle, action, children }: AppScr
   }));
 
   return (
-    <ScrollView
-      style={styles.scrollView}
-      contentInsetAdjustmentBehavior="automatic"
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={[
-        styles.content,
-        {
-          paddingTop: Platform.OS === 'android' ? insets.top + Spacing.three : Spacing.three,
-          paddingBottom: insets.bottom + 112,
-        },
-      ]}>
-      <View nativeID="app-screen-content" style={styles.inner}>
-        <Animated.View style={[styles.header, headerAnimatedStyle]}>
-          <View style={styles.headerCopy}>
-            {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-            {typeof title === 'string' ? <Text style={styles.title}>{title}</Text> : title}
-            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+    <View style={styles.screen}>
+      <AuroraBackdrop scrollY={scrollY} />
+      <Animated.ScrollView
+        style={styles.scrollView}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentInsetAdjustmentBehavior="automatic"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: Platform.OS === 'android' ? insets.top + Spacing.three : Spacing.three,
+            paddingBottom: insets.bottom + 120,
+          },
+        ]}>
+        <View nativeID="app-screen-content" style={styles.inner}>
+          <Animated.View style={[styles.header, headerAnimatedStyle]}>
+            <View style={styles.headerCopy}>
+              {eyebrow ? (
+                <View style={styles.eyebrowPill}>
+                  <View style={styles.eyebrowDot} />
+                  <Text style={styles.eyebrow}>{eyebrow}</Text>
+                </View>
+              ) : null}
+              {typeof title === 'string' ? <Text style={[styles.title, DisplayText]}>{title}</Text> : title}
+              {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+            </View>
+            {action}
+          </Animated.View>
+          <View style={styles.sections}>
+            {screenChildren.map((child, index) => (
+              <AnimatedScreenSection key={index} progress={entranceProgress} index={index}>
+                {child}
+              </AnimatedScreenSection>
+            ))}
           </View>
-          {action}
-        </Animated.View>
-        <View style={styles.sections}>
-          {screenChildren.map((child, index) => (
-            <AnimatedScreenSection key={index} progress={entranceProgress} index={index}>
-              {child}
-            </AnimatedScreenSection>
-          ))}
         </View>
-      </View>
-    </ScrollView>
+      </Animated.ScrollView>
+    </View>
   );
 }
 
 export function SectionHeader({ title, detail }: { title: string; detail?: string }) {
   return (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={[styles.sectionTitle, DisplayText]}>{title}</Text>
       {detail ? <Text style={styles.sectionDetail}>{detail}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
+  screen: {
     flex: 1,
     backgroundColor: Colors.light.background,
+  },
+  scrollView: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
   content: {
     flexGrow: 1,
     alignItems: 'center',
-    paddingHorizontal: Spacing.three,
+    paddingHorizontal: 18,
   },
   inner: {
     width: '100%',
     maxWidth: MaxContentWidth,
-    gap: Spacing.four,
+    gap: 26,
   },
   sections: {
     width: '100%',
-    gap: Spacing.four,
+    gap: 26,
   },
   animatedSection: {
     width: '100%',
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
     gap: Spacing.three,
+    paddingTop: 6,
   },
   headerCopy: {
     flex: 1,
-    gap: 3,
+    gap: 6,
+  },
+  eyebrowPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  eyebrowDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.light.primary,
   },
   eyebrow: {
     color: Colors.light.primary,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
   },
   title: {
     color: Colors.light.text,
-    fontSize: 32,
-    lineHeight: 39,
-    fontWeight: '800',
-    letterSpacing: -0.7,
+    fontSize: 36,
+    lineHeight: 46,
   },
   subtitle: {
     color: Colors.light.textSecondary,
     fontSize: 15,
-    lineHeight: 21,
+    lineHeight: 22,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -188,8 +225,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: Colors.light.text,
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 23,
+    lineHeight: 30,
   },
   sectionDetail: {
     color: Colors.light.textSecondary,

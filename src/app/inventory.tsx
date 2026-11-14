@@ -30,11 +30,13 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { GradientSurface, gradientFrom } from '@/components/gradient-surface';
+import { CountUp } from '@/components/count-up';
 import { AppScreen, SectionHeader } from '@/components/app-screen';
 import { BarcodeScanner } from '@/components/barcode-scanner';
 import { ShoppingListModal } from '@/components/shopping-list-modal';
 import { StorageCelebration } from '@/components/storage-celebration';
-import { Colors, Spacing } from '@/constants/theme';
+import { Colors, DisplayText, Shadows, Spacing } from '@/constants/theme';
 import { useKitchen } from '@/context/kitchen-context';
 import { useLanguage, type AppLanguage } from '@/context/language-context';
 import { formatBadgeCount } from '@/data/badge-utils';
@@ -1182,7 +1184,7 @@ export default function InventoryScreen() {
         ) : null}
 
         {!hasInventoryFilter ? (
-          <View style={[styles.summaryCard, { backgroundColor: selectedLibraryColor }]}>
+          <GradientSurface colors={gradientFrom(selectedLibraryColor)} style={styles.summaryCard}>
             <View style={styles.summaryCopy}>
               <Text style={styles.summaryEyebrow}>
                 {text(
@@ -1190,7 +1192,7 @@ export default function InventoryScreen() {
                   `${localizeContent(selectedLibraryInfo.label, language)} overview`
                 )}
               </Text>
-              <Text style={styles.summaryTitle}>
+              <Text style={[styles.summaryTitle, DisplayText]}>
                 {expiringItems.length > 0
                   ? text('有物品需要优先处理', 'Some items need attention')
                   : text('这个库状态不错', 'Everything looks good')}
@@ -1206,16 +1208,16 @@ export default function InventoryScreen() {
             </View>
             <View style={styles.summaryStats}>
               <View style={styles.summaryStat}>
-                <Text style={styles.summaryNumber}>{activeItems.length}</Text>
+                <CountUp style={styles.summaryNumber} value={activeItems.length} />
                 <Text style={styles.summaryLabel}>{text('项库存', 'items')}</Text>
               </View>
               <View style={styles.summaryDivider} />
               <View style={styles.summaryStat}>
-                <Text style={styles.summaryNumber}>{expiringItems.length}</Text>
+                <CountUp style={styles.summaryNumber} value={expiringItems.length} />
                 <Text style={styles.summaryLabel}>{text('快到期', 'expiring')}</Text>
               </View>
             </View>
-          </View>
+          </GradientSurface>
         ) : null}
 
         {!hasInventoryFilter && expiringItems.length > 0 ? (
@@ -2968,13 +2970,13 @@ const styles = StyleSheet.create({
   shoppingButton: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 23, borderWidth: 1, borderColor: Colors.light.border, backgroundColor: Colors.light.surface },
   shoppingButtonIcon: { fontSize: 20 },
   shoppingBadge: { position: 'absolute', top: -3, right: -2, minWidth: 19, height: 19, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderRadius: 10, borderWidth: 2, borderColor: Colors.light.background, backgroundColor: Colors.light.danger },
-  shoppingBadgeText: { color: '#FFFFFF', fontSize: 8.5, fontWeight: '900' },
+  shoppingBadgeText: { color: '#FFFFFF', fontSize: 8.5, fontWeight: '800' },
   trashPage: { flex: 1, backgroundColor: Colors.light.background },
   trashHeader: { minHeight: 76, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border, backgroundColor: Colors.light.background },
   trashCloseButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   trashCloseText: { color: Colors.light.text, fontSize: 27, lineHeight: 29, fontWeight: '500' },
   trashHeaderCopy: { alignItems: 'center', gap: 2 },
-  trashHeaderTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '900' },
+  trashHeaderTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '800' },
   trashHeaderSubtitle: { color: Colors.light.textSecondary, fontSize: 10, fontWeight: '700' },
   trashHeaderPlaceholder: { width: 42, height: 42 },
   trashList: { width: '100%', maxWidth: 720, alignSelf: 'center', gap: 12, padding: 18, paddingBottom: 40 },
@@ -2982,19 +2984,19 @@ const styles = StyleSheet.create({
   trashIntroIcon: { width: 60, height: 60, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: '#FFFFFF24' },
   trashIntroEmoji: { fontSize: 34 },
   trashIntroCopy: { flex: 1, gap: 5 },
-  trashIntroTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
+  trashIntroTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
   trashIntroText: { color: '#DDEDE3', fontSize: 10.5, lineHeight: 16, fontWeight: '600' },
   trashHint: { color: Colors.light.textSecondary, fontSize: 11, lineHeight: 17, textAlign: 'center' },
   trashCard: { minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 18, borderWidth: 1, borderColor: Colors.light.border, backgroundColor: Colors.light.surface },
   trashEmoji: { fontSize: 27 },
   trashCopy: { flex: 1, gap: 4 },
-  trashName: { color: Colors.light.text, fontSize: 13, fontWeight: '900' },
+  trashName: { color: Colors.light.text, fontSize: 13, fontWeight: '800' },
   trashMeta: { color: Colors.light.textSecondary, fontSize: 10 },
   restoreButton: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 12, backgroundColor: Colors.light.primarySoft },
-  restoreButtonText: { color: Colors.light.primary, fontSize: 11, fontWeight: '900' },
+  restoreButtonText: { color: Colors.light.primary, fontSize: 11, fontWeight: '800' },
   trashEmpty: { alignItems: 'center', gap: 8, paddingVertical: 70 },
   trashEmptyEmoji: { fontSize: 48 },
-  trashEmptyTitle: { color: Colors.light.text, fontSize: 17, fontWeight: '900' },
+  trashEmptyTitle: { color: Colors.light.text, fontSize: 17, fontWeight: '800' },
   addButton: {
     width: 46,
     height: 46,
@@ -3114,14 +3116,14 @@ const styles = StyleSheet.create({
   },
   storageFilterCountTextSelected: { color: '#FFFFFF' },
   summaryCard: {
-    backgroundColor: Colors.light.primary,
-    borderRadius: 26,
+    borderRadius: 30,
     padding: Spacing.four,
     gap: Spacing.four,
+    boxShadow: Shadows.glow,
   },
   summaryCopy: { gap: 5 },
   summaryEyebrow: { color: '#CDE5D6', fontSize: 12, fontWeight: '800', letterSpacing: 0.6 },
-  summaryTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '800' },
+  summaryTitle: { color: '#FFFFFF', fontSize: 27, lineHeight: 35 },
   summaryText: { color: '#E4F0E8', fontSize: 14, lineHeight: 20 },
   summaryStats: { flexDirection: 'row', alignItems: 'center' },
   summaryStat: { flex: 1, gap: 2 },
@@ -3282,7 +3284,7 @@ const styles = StyleSheet.create({
   detailHeaderButtonDisabled: { opacity: 0.38 },
   detailHeaderButtonPressed: { opacity: 0.68, transform: [{ scale: 0.96 }] },
   detailHeaderTitle: { flex: 1, textAlign: 'center', paddingHorizontal: 8 },
-  detailDoneText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
+  detailDoneText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   modalCancel: { color: Colors.light.textSecondary, fontSize: 16, fontWeight: '600' },
   modalEdit: { color: Colors.light.primary, fontSize: 16, fontWeight: '800' },
   modalTitle: { color: Colors.light.text, fontSize: 19, fontWeight: '800' },
@@ -3296,13 +3298,13 @@ const styles = StyleSheet.create({
   quickPresetChip: { minWidth: 104, minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12, borderRadius: 16, backgroundColor: Colors.light.primarySoft },
   quickPresetEmoji: { fontSize: 20 },
   quickPresetCopy: { gap: 2 },
-  quickPresetName: { color: Colors.light.primary, fontSize: 13, fontWeight: '900' },
+  quickPresetName: { color: Colors.light.primary, fontSize: 13, fontWeight: '800' },
   quickPresetAmount: { color: Colors.light.textSecondary, fontSize: 10.5, fontWeight: '700' },
   quickPresetEmpty: { minHeight: 54, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16, backgroundColor: Colors.light.backgroundElement },
   quickPresetEmptyText: { color: Colors.light.textSecondary, fontSize: 11.5, lineHeight: 17 },
   scanBarcodeButton: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 13, borderRadius: 17, borderWidth: 1, borderColor: '#B7DCC5', backgroundColor: Colors.light.primarySoft },
   scanBarcodeCopy: { flex: 1, gap: 3 },
-  scanBarcodeTitle: { color: Colors.light.primary, fontSize: 14, fontWeight: '900' },
+  scanBarcodeTitle: { color: Colors.light.primary, fontSize: 14, fontWeight: '800' },
   scanBarcodeText: { color: Colors.light.textSecondary, fontSize: 9.5 },
   scanBarcodeChevron: { color: Colors.light.primary, fontSize: 22 },
   scanStatus: { color: Colors.light.primary, fontSize: 10.5, lineHeight: 16, fontWeight: '700' },
@@ -3438,7 +3440,7 @@ const styles = StyleSheet.create({
   },
   shelfSuggestionTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '800' },
   shelfSuggestionResult: { gap: 5 },
-  shelfSuggestionRange: { color: Colors.light.primary, fontSize: 20, fontWeight: '900' },
+  shelfSuggestionRange: { color: Colors.light.primary, fontSize: 20, fontWeight: '800' },
   shelfSuggestionNote: { color: Colors.light.textSecondary, fontSize: 11, lineHeight: 17 },
   shelfSuggestionActions: {
     flexDirection: 'row',
@@ -3548,7 +3550,7 @@ const styles = StyleSheet.create({
   },
   detailEditEmojiPreviewText: { fontSize: 29 },
   detailEditIntroCopy: { flex: 1, gap: 3 },
-  detailEditIntroTitle: { color: Colors.light.primary, fontSize: 14, fontWeight: '900' },
+  detailEditIntroTitle: { color: Colors.light.primary, fontSize: 14, fontWeight: '800' },
   detailEditIntroText: { color: Colors.light.textSecondary, fontSize: 11, lineHeight: 16 },
   detailShelfSuggestion: {
     flexDirection: 'row',
@@ -3599,7 +3601,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.surface,
   },
   disposalEmoji: { fontSize: 34 },
-  disposalTitle: { color: Colors.light.text, fontSize: 20, fontWeight: '900', textAlign: 'center' },
+  disposalTitle: { color: Colors.light.text, fontSize: 20, fontWeight: '800', textAlign: 'center' },
   disposalSubtitle: { color: Colors.light.textSecondary, fontSize: 11.5, lineHeight: 18, textAlign: 'center' },
   disposalOptions: { gap: 9 },
   disposalOption: {
@@ -3617,7 +3619,7 @@ const styles = StyleSheet.create({
   disposalOptionIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14 },
   disposalOptionEmoji: { fontSize: 23 },
   disposalOptionCopy: { flex: 1, gap: 3 },
-  disposalOptionTitle: { color: Colors.light.text, fontSize: 13.5, fontWeight: '900' },
+  disposalOptionTitle: { color: Colors.light.text, fontSize: 13.5, fontWeight: '800' },
   disposalOptionText: { color: Colors.light.textSecondary, fontSize: 10.5, lineHeight: 15 },
   disposalCancel: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: Colors.light.backgroundElement },
   disposalCancelText: { color: Colors.light.textSecondary, fontSize: 13, fontWeight: '800' },
@@ -3631,7 +3633,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.primarySoft,
   },
   detailEmoji: { fontSize: 42 },
-  detailName: { color: Colors.light.text, fontSize: 26, fontWeight: '900' },
+  detailName: { color: Colors.light.text, fontSize: 26, fontWeight: '800' },
   detailBadges: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   detailLibraryBadge: {
     borderRadius: 9,
@@ -3675,31 +3677,31 @@ const styles = StyleSheet.create({
   detailInfoValue: { color: Colors.light.text, fontSize: 15, lineHeight: 20, fontWeight: '800' },
   batchCard: { flexDirection: 'row', alignItems: 'center', gap: 11, padding: 14, borderRadius: 18, backgroundColor: Colors.light.primarySoft },
   batchIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: Colors.light.surface },
-  batchIconText: { color: Colors.light.primary, fontSize: 17, fontWeight: '900' },
+  batchIconText: { color: Colors.light.primary, fontSize: 17, fontWeight: '800' },
   batchCopy: { flex: 1, gap: 3 },
-  batchTitle: { color: Colors.light.primary, fontSize: 12.5, fontWeight: '900' },
+  batchTitle: { color: Colors.light.primary, fontSize: 12.5, fontWeight: '800' },
   batchText: { color: Colors.light.primary, fontSize: 10, lineHeight: 15 },
   quickAdjustCard: { gap: 13, padding: 14, borderRadius: 18, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   quickAdjustCopy: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  quickAdjustTitle: { color: Colors.light.text, fontSize: 12.5, fontWeight: '900' },
-  quickAdjustValue: { color: Colors.light.primary, fontSize: 15, fontWeight: '900' },
+  quickAdjustTitle: { color: Colors.light.text, fontSize: 12.5, fontWeight: '800' },
+  quickAdjustValue: { color: Colors.light.primary, fontSize: 15, fontWeight: '800' },
   quickAdjustActions: { flexDirection: 'row', gap: 7 },
   quickAdjustButton: { minWidth: 64, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: Colors.light.backgroundElement },
-  quickAdjustButtonText: { color: Colors.light.primary, fontSize: 11, fontWeight: '900' },
+  quickAdjustButtonText: { color: Colors.light.primary, fontSize: 11, fontWeight: '800' },
   finishedButton: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: Colors.light.primarySoft },
-  finishedButtonText: { color: Colors.light.primary, fontSize: 11, fontWeight: '900' },
+  finishedButtonText: { color: Colors.light.primary, fontSize: 11, fontWeight: '800' },
   adjustDisabled: { opacity: 0.35 },
   historySection: { gap: 12 },
   historyList: { overflow: 'hidden', borderRadius: 18, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   historyRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border },
   historyCopy: { gap: 3 },
-  historyReason: { color: Colors.light.text, fontSize: 12, fontWeight: '900' },
+  historyReason: { color: Colors.light.text, fontSize: 12, fontWeight: '800' },
   historyDate: { color: Colors.light.textSecondary, fontSize: 9.5 },
-  historyAmount: { color: Colors.light.danger, fontSize: 12, fontWeight: '900' },
+  historyAmount: { color: Colors.light.danger, fontSize: 12, fontWeight: '800' },
   historyAmountPositive: { color: Colors.light.primary },
   suggestionSection: { gap: 13 },
   suggestionHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  suggestionTitle: { color: Colors.light.text, fontSize: 20, fontWeight: '900' },
+  suggestionTitle: { color: Colors.light.text, fontSize: 20, fontWeight: '800' },
   suggestionDetail: { color: Colors.light.textSecondary, fontSize: 11, fontWeight: '600' },
   suggestionList: { gap: 9 },
   suggestionRow: {
@@ -3734,7 +3736,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   colorOptionSelected: { borderColor: '#FFFFFF', boxShadow: '0 0 0 2px #2F6D50' },
-  colorCheck: { color: '#FFFFFF', fontSize: 18, fontWeight: '900' },
+  colorCheck: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
   libraryPreview: {
     minHeight: 92,
     borderRadius: 22,
@@ -3745,74 +3747,74 @@ const styles = StyleSheet.create({
   },
   libraryPreviewEmoji: { fontSize: 35 },
   libraryPreviewCopy: { gap: 2 },
-  libraryPreviewName: { color: '#FFFFFF', fontSize: 20, fontWeight: '900' },
+  libraryPreviewName: { color: '#FFFFFF', fontSize: 20, fontWeight: '800' },
   libraryPreviewDetail: { color: '#FFFFFFCC', fontSize: 12, fontWeight: '600' },
   smartSuccessBanner: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, borderRadius: 18, backgroundColor: '#F0EBFF', borderWidth: 1, borderColor: '#D7CBF2' },
-  smartSuccessIcon: { width: 29, height: 29, overflow: 'hidden', textAlign: 'center', lineHeight: 29, borderRadius: 15, color: '#FFFFFF', backgroundColor: '#735C9B', fontSize: 14, fontWeight: '900' },
+  smartSuccessIcon: { width: 29, height: 29, overflow: 'hidden', textAlign: 'center', lineHeight: 29, borderRadius: 15, color: '#FFFFFF', backgroundColor: '#735C9B', fontSize: 14, fontWeight: '800' },
   smartSuccessText: { flex: 1, color: '#654D8B', fontSize: 12, fontWeight: '800' },
   smartSuccessClose: { color: '#735C9B', fontSize: 20 },
   addModeBackdrop: { flex: 1, alignItems: 'flex-end', paddingHorizontal: 14, backgroundColor: '#16221C38' },
   addModeSheet: { width: 286, gap: 8, padding: 11, borderRadius: 22, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: '#FFFFFF', shadowColor: '#173D2F', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 24, elevation: 8 },
   addModeHandle: { width: 42, height: 4, alignSelf: 'center', borderRadius: 2, backgroundColor: Colors.light.border, marginBottom: 3 },
-  addModeTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '900', paddingHorizontal: 5, paddingTop: 2, paddingBottom: 1 },
+  addModeTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '800', paddingHorizontal: 5, paddingTop: 2, paddingBottom: 1 },
   addModeSubtitle: { color: Colors.light.textSecondary, fontSize: 11.5, marginBottom: 3 },
   addModeOption: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 16, backgroundColor: Colors.light.background, borderWidth: 1, borderColor: Colors.light.border },
   addModeOptionAi: { backgroundColor: '#F5F1FF', borderColor: '#D7CBF2' },
   addModeIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: Colors.light.primarySoft },
   addModeIconAi: { backgroundColor: '#735C9B' },
   addModeIconText: { color: Colors.light.primary, fontSize: 25, fontWeight: '700' },
-  addModeAiIcon: { color: '#FFFFFF', fontSize: 20, fontWeight: '900' },
+  addModeAiIcon: { color: '#FFFFFF', fontSize: 20, fontWeight: '800' },
   addModeCopy: { flex: 1, gap: 4 },
-  addModeOptionTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '900' },
+  addModeOptionTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '800' },
   addModeOptionText: { color: Colors.light.textSecondary, fontSize: 10.5, lineHeight: 15 },
   addModeChevron: { color: Colors.light.textSecondary, fontSize: 24 },
   smartHeaderPlaceholder: { width: 46 },
   smartAddContent: { width: '100%', maxWidth: 680, alignSelf: 'center', gap: 15, padding: 18, paddingBottom: 44 },
   smartAddIntro: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 15, borderRadius: 21, backgroundColor: '#735C9B' },
-  smartAddIntroIcon: { width: 42, height: 42, overflow: 'hidden', textAlign: 'center', lineHeight: 42, borderRadius: 15, color: '#735C9B', backgroundColor: '#FFFFFF', fontSize: 18, fontWeight: '900' },
+  smartAddIntroIcon: { width: 42, height: 42, overflow: 'hidden', textAlign: 'center', lineHeight: 42, borderRadius: 15, color: '#735C9B', backgroundColor: '#FFFFFF', fontSize: 18, fontWeight: '800' },
   smartAddIntroCopy: { flex: 1, gap: 4 },
-  smartAddIntroTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
+  smartAddIntroTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   smartAddIntroText: { color: '#EEE8FA', fontSize: 10.5, lineHeight: 16 },
   smartModeSwitch: { flexDirection: 'row', gap: 4, padding: 4, borderRadius: 16, backgroundColor: Colors.light.backgroundElement },
   smartModeOption: { flex: 1, minHeight: 43, alignItems: 'center', justifyContent: 'center', borderRadius: 13 },
   smartModeOptionSelected: { backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   smartModeText: { color: Colors.light.textSecondary, fontSize: 11.5, fontWeight: '800' },
-  smartModeTextSelected: { color: '#735C9B', fontWeight: '900' },
+  smartModeTextSelected: { color: '#735C9B', fontWeight: '800' },
   smartTextInput: { minHeight: 132, padding: 15, borderRadius: 20, color: Colors.light.text, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border, fontSize: 14, lineHeight: 21, textAlignVertical: 'top' },
   receiptSection: { gap: 11 },
   receiptEmptyCard: { minHeight: 174, alignItems: 'center', justifyContent: 'center', gap: 7, padding: 22, borderRadius: 21, backgroundColor: Colors.light.surface, borderWidth: 1, borderStyle: 'dashed', borderColor: '#BBAFD0' },
   receiptEmptyEmoji: { fontSize: 39 },
-  receiptEmptyTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '900' },
+  receiptEmptyTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '800' },
   receiptEmptyText: { maxWidth: 290, color: Colors.light.textSecondary, fontSize: 10, lineHeight: 15, textAlign: 'center' },
   receiptPreviewCard: { minHeight: 122, flexDirection: 'row', alignItems: 'center', gap: 11, padding: 11, borderRadius: 21, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   receiptPreview: { width: 74, height: 100, borderRadius: 13, backgroundColor: Colors.light.backgroundElement },
   receiptPreviewCopy: { flex: 1, gap: 5 },
-  receiptPreviewTitle: { color: Colors.light.text, fontSize: 15, fontWeight: '900' },
+  receiptPreviewTitle: { color: Colors.light.text, fontSize: 15, fontWeight: '800' },
   receiptPreviewText: { color: Colors.light.textSecondary, fontSize: 9.5, lineHeight: 14 },
   receiptRemoveButton: { width: 31, height: 31, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: Colors.light.backgroundElement },
   receiptRemoveText: { color: Colors.light.danger, fontSize: 19, lineHeight: 21 },
   receiptActions: { flexDirection: 'row', gap: 9 },
   receiptActionButton: { flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 15, backgroundColor: Colors.light.primarySoft, borderWidth: 1, borderColor: '#B8D6C2' },
-  receiptActionText: { color: Colors.light.primary, fontSize: 11, fontWeight: '900' },
+  receiptActionText: { color: Colors.light.primary, fontSize: 11, fontWeight: '800' },
   smartErrorCard: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 15, backgroundColor: Colors.light.warningSoft },
-  smartErrorIcon: { width: 24, height: 24, overflow: 'hidden', textAlign: 'center', lineHeight: 24, borderRadius: 12, color: '#FFFFFF', backgroundColor: Colors.light.warning, fontSize: 12, fontWeight: '900' },
+  smartErrorIcon: { width: 24, height: 24, overflow: 'hidden', textAlign: 'center', lineHeight: 24, borderRadius: 12, color: '#FFFFFF', backgroundColor: Colors.light.warning, fontSize: 12, fontWeight: '800' },
   smartErrorText: { flex: 1, color: Colors.light.warning, fontSize: 10.5, lineHeight: 15, fontWeight: '700' },
   smartAnalyzeButton: { minHeight: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: '#735C9B' },
-  smartAnalyzeButtonText: { color: '#FFFFFF', fontSize: 13.5, fontWeight: '900' },
+  smartAnalyzeButtonText: { color: '#FFFFFF', fontSize: 13.5, fontWeight: '800' },
   smartResultSection: { gap: 12 },
   smartResultHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  smartResultTitle: { color: Colors.light.text, fontSize: 19, fontWeight: '900' },
+  smartResultTitle: { color: Colors.light.text, fontSize: 19, fontWeight: '800' },
   smartResultHint: { color: Colors.light.textSecondary, fontSize: 9.5, marginTop: 3 },
-  smartSelectedCount: { color: '#735C9B', fontSize: 12, fontWeight: '900' },
+  smartSelectedCount: { color: '#735C9B', fontSize: 12, fontWeight: '800' },
   smartItemList: { gap: 8 },
   smartItemCard: { minHeight: 68, gap: 9, padding: 11, borderRadius: 17, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   smartItemCardSelected: { borderColor: '#735C9B', backgroundColor: '#F5F1FF' },
   smartItemMainRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   smartItemEmoji: { width: 38, fontSize: 27, textAlign: 'center' },
   smartItemCopy: { flex: 1, gap: 3 },
-  smartItemName: { color: Colors.light.text, fontSize: 15, fontWeight: '900' },
+  smartItemName: { color: Colors.light.text, fontSize: 15, fontWeight: '800' },
   smartItemMeta: { color: Colors.light.textSecondary, fontSize: 9.5 },
-  smartItemAmount: { color: Colors.light.text, fontSize: 11, fontWeight: '900' },
+  smartItemAmount: { color: Colors.light.text, fontSize: 11, fontWeight: '800' },
   smartEditButton: { width: 27, height: 27, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: '#ECE5F7' },
   smartEditButtonActive: { backgroundColor: '#735C9B' },
   smartItemEditor: { flexDirection: 'row', gap: 7, paddingTop: 9, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#CFC5DE' },
@@ -3822,7 +3824,7 @@ const styles = StyleSheet.create({
   smartEditUnitInput: { width: 57, textAlign: 'center' },
   smartItemCheck: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderRadius: 12, borderWidth: 1, borderColor: Colors.light.border, backgroundColor: Colors.light.background },
   smartItemCheckSelected: { backgroundColor: '#735C9B', borderColor: '#735C9B' },
-  smartItemCheckText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },
+  smartItemCheckText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
   smartConfirmButton: { minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: Colors.light.primary },
-  smartConfirmButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
+  smartConfirmButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
 });
