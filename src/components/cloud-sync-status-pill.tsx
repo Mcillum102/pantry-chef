@@ -25,7 +25,7 @@ export function CloudSyncStatusPill() {
     <View pointerEvents="box-none" style={[styles.wrap, { top: Math.max(insets.top, 10) + 4 }]}>
       <Pressable
         accessibilityRole="button"
-        onPress={() => conflict ? router.push('/profile') : void syncNow()}
+        onPress={() => conflict ? router.push('/account') : void syncNow()}
         style={[styles.pill, conflict && styles.conflictPill, failed && styles.failedPill]}>
         {failed ? <Text style={styles.icon}>☁️</Text> : conflict ? <Text style={styles.icon}>⚠️</Text> : <ActivityIndicator size="small" color={Colors.light.primary} />}
         <Text style={styles.label} numberOfLines={1}>{label}</Text>

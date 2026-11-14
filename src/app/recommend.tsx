@@ -917,12 +917,6 @@ export default function HealthReportScreen() {
               </View>
             </View>
           </View>
-          <Text style={styles.healthDisclaimer}>
-            {text(
-              '以上是基于饮食记录的结构提示，不替代专业营养或医疗建议。',
-              'These are record-based food pattern notes, not professional nutrition or medical advice.'
-            )}
-          </Text>
         </View>
 
         <View style={styles.section}>
@@ -1370,9 +1364,6 @@ export default function HealthReportScreen() {
               keyboardType="number-pad"
               style={[styles.input, Number(goalFluid) <= 0 && styles.inputError]}
             />
-            <Text style={styles.goalDisclaimer}>
-              {text('这里只用于个人记录，不构成医疗或营养建议。', 'For personal tracking only; this is not medical or nutrition advice.')}
-            </Text>
             <Pressable
               accessibilityRole="button"
               disabled={!validGoals}
@@ -1525,7 +1516,6 @@ const styles = StyleSheet.create({
   insightCopy: { flex: 1, gap: 3 },
   insightTitle: { color: Colors.light.text, fontSize: 13, fontWeight: '900' },
   insightText: { color: Colors.light.textSecondary, fontSize: 11.5, lineHeight: 17 },
-  healthDisclaimer: { color: Colors.light.textSecondary, fontSize: 10.5, lineHeight: 16, paddingHorizontal: 4 },
   dietaryCard: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 20, borderWidth: 1, borderColor: '#D9D3B8', backgroundColor: '#FFFBEF' },
   dietaryIcon: { width: 47, height: 47, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: '#FFFFFF' },
   dietaryEmoji: { fontSize: 23 },
@@ -1612,7 +1602,6 @@ const styles = StyleSheet.create({
   goalModalTitle: { color: Colors.light.text, fontSize: 19, fontWeight: '900' },
   goalModalSubtitle: { color: Colors.light.textSecondary, fontSize: 10.5, marginTop: 4 },
   goalModalClose: { color: Colors.light.textSecondary, fontSize: 25, lineHeight: 27 },
-  goalDisclaimer: { color: Colors.light.textSecondary, fontSize: 10, lineHeight: 15 },
   goalSaveButton: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: Colors.light.primary },
   goalSaveButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
   formHint: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, padding: 13, borderRadius: 14, backgroundColor: Colors.light.primarySoft },

@@ -1,11 +1,15 @@
-export function shouldShowKitchenLoading(input: {
+export type KitchenAccessState = 'choose-member' | 'loading' | 'error' | 'ready';
+
+export function getKitchenAccessState(input: {
+  hasMember: boolean;
   configured: boolean;
-  status: string;
-  hasSession: boolean;
   hasHousehold: boolean;
-}) {
-  if (!input.configured) return false;
-  if (input.status === 'loading') return true;
-  if (!input.hasSession || input.hasHousehold) return false;
-  return !['needs-household', 'signed-out', 'not-configured', 'error'].includes(input.status);
+  status: string;
+  hasError: boolean;
+}): KitchenAccessState {
+  if (!input.hasMember) return 'choose-member';
+  // 没配置 Supabase：纯本地模式，直接进入
+  if (!input.configured || input.hasHousehold) return 'ready';
+  if (input.status === 'error' || input.hasError) return 'error';
+  return 'loading';
 }

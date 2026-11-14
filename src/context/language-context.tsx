@@ -6,34 +6,32 @@ import {
   useMemo,
 } from 'react';
 
-import { usePersistentState } from '@/hooks/use-persistent-state';
-
 export type AppLanguage = 'zh' | 'en';
 
 type LanguageContextValue = {
   language: AppLanguage;
   locale: 'zh-CN' | 'en-CA';
-  setLanguage: (language: AppLanguage) => void;
   text: (chinese: string, english: string) => string;
 };
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
+// 私用版只保留中文。文案里的英文字符串暂时留着，切换入口已经删除。
+const language: AppLanguage = 'zh';
+
 export function LanguageProvider({ children }: PropsWithChildren) {
-  const [language, setLanguage] = usePersistentState<AppLanguage>('language', 'zh');
   const text = useCallback(
-    (chinese: string, english: string) => (language === 'zh' ? chinese : english),
-    [language]
+    (chinese: string, _english: string) => chinese,
+    []
   );
 
   const value = useMemo<LanguageContextValue>(
     () => ({
       language,
-      locale: language === 'zh' ? 'zh-CN' : 'en-CA',
-      setLanguage,
+      locale: 'zh-CN',
       text,
     }),
-    [language, setLanguage, text]
+    [text]
   );
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;

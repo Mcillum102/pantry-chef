@@ -10,6 +10,7 @@ import { CloudSyncProvider } from '@/context/cloud-sync-context';
 import { CookingSessionProvider } from '@/context/cooking-session-context';
 import { KitchenProvider } from '@/context/kitchen-context';
 import { LanguageProvider } from '@/context/language-context';
+import { MemberProvider } from '@/context/member-context';
 import { HealthProvider } from '@/context/health-context';
 import { ReminderProvider } from '@/context/reminder-context';
 import { WidgetProvider } from '@/context/widget-context';
@@ -25,6 +26,7 @@ export default function RootLayout() {
           <KitchenProvider key="inventory-schema-v7">
             <HealthProvider>
               <ReminderProvider>
+                <MemberProvider>
                 <CloudSyncProvider>
                 <CookingSessionProvider>
                   <WidgetProvider>
@@ -34,6 +36,7 @@ export default function RootLayout() {
                   </WidgetProvider>
                 </CookingSessionProvider>
                 </CloudSyncProvider>
+                </MemberProvider>
               </ReminderProvider>
             </HealthProvider>
           </KitchenProvider>

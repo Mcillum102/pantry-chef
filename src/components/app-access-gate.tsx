@@ -1,42 +1,50 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import AccountScreen from '@/app/account';
 import AppTabs from '@/components/app-tabs';
 import { CloudSyncStatusPill } from '@/components/cloud-sync-status-pill';
-import { FirstRunOnboarding } from '@/components/first-run-onboarding';
+import { MemberPicker } from '@/components/member-picker';
 import { Colors } from '@/constants/theme';
 import { useCloudSync } from '@/context/cloud-sync-context';
 import { useLanguage } from '@/context/language-context';
-import { shouldShowKitchenLoading } from '@/data/app-access-utils';
+import { useMember } from '@/context/member-context';
+import { getKitchenAccessState } from '@/data/app-access-utils';
 
 export function AppAccessGate() {
-  const { configured, status, session, household, lastError, retryInitialization } = useCloudSync();
+  const { configured, status, household, lastError, retryInitialization } = useCloudSync();
+  const { member, isHydrated: memberHydrated } = useMember();
   const { text } = useLanguage();
 
-  if (shouldShowKitchenLoading({
+  if (!memberHydrated) return <View style={styles.loadingPage} />;
+
+  const access = getKitchenAccessState({
+    hasMember: Boolean(member),
     configured,
-    status,
-    hasSession: Boolean(session),
     hasHousehold: Boolean(household),
-  })) {
+    status,
+    hasError: Boolean(lastError),
+  });
+
+  if (access === 'choose-member') return <MemberPicker />;
+
+  if (access === 'loading') {
     return (
-      <View style={styles.loadingPage} accessibilityLabel={text('正在检查账号状态', 'Checking account status')}>
+      <View style={styles.loadingPage} accessibilityLabel={text('正在连接厨房', 'Connecting to the kitchen')}>
         <View style={styles.loadingMark}>
           <Text style={styles.loadingEmoji}>🌿</Text>
         </View>
         <ActivityIndicator color={Colors.light.primary} />
-        <Text style={styles.loadingTitle}>{text('正在打开你的厨房…', 'Opening your kitchen…')}</Text>
+        <Text style={styles.loadingTitle}>{text('正在打开我们的厨房…', 'Opening our kitchen…')}</Text>
       </View>
     );
   }
 
-  if (configured && session && !household && status === 'error') {
+  if (access === 'error') {
     return (
       <View style={styles.loadingPage} accessibilityLabel={text('厨房加载失败', 'Kitchen loading failed')}>
         <View style={[styles.loadingMark, styles.errorMark]}>
           <Text style={styles.loadingEmoji}>☁️</Text>
         </View>
-        <Text style={styles.errorTitle}>{text('暂时连不上家庭厨房', 'Could not open your household')}</Text>
+        <Text style={styles.errorTitle}>{text('暂时连不上我们的厨房', 'Could not open the kitchen')}</Text>
         <Text style={styles.errorText}>
           {text('本机数据仍然安全。请检查网络后重试。', 'Your local data is safe. Check your connection and try again.')}
         </Text>
@@ -48,15 +56,10 @@ export function AppAccessGate() {
     );
   }
 
-  if (!configured || !session || !household) {
-    return <AccountScreen requiredSetup />;
-  }
-
   return (
     <View style={styles.appRoot}>
       <AppTabs />
       <CloudSyncStatusPill />
-      <FirstRunOnboarding />
     </View>
   );
 }

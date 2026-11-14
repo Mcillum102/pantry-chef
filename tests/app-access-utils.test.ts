@@ -1,40 +1,28 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { shouldShowKitchenLoading } from '../src/data/app-access-utils.ts';
+import { getKitchenAccessState } from '../src/data/app-access-utils.ts';
 
-test('keeps the loading screen visible while an authenticated household is loading', () => {
-  assert.equal(shouldShowKitchenLoading({
-    configured: true,
-    status: 'syncing',
-    hasSession: true,
-    hasHousehold: false,
-  }), true);
+const base = { hasMember: true, configured: true, hasHousehold: false, status: 'loading', hasError: false };
+
+test('asks who is using this phone before anything else', () => {
+  assert.equal(getKitchenAccessState({ ...base, hasMember: false, hasHousehold: true }), 'choose-member');
 });
 
-test('does not mistake a missing household for a loading household', () => {
-  assert.equal(shouldShowKitchenLoading({
-    configured: true,
-    status: 'needs-household',
-    hasSession: true,
-    hasHousehold: false,
-  }), false);
+test('keeps loading while the shared account signs in and joins the kitchen', () => {
+  assert.equal(getKitchenAccessState(base), 'loading');
+  assert.equal(getKitchenAccessState({ ...base, status: 'syncing' }), 'loading');
 });
 
-test('shows account setup for a signed-out user', () => {
-  assert.equal(shouldShowKitchenLoading({
-    configured: true,
-    status: 'signed-out',
-    hasSession: false,
-    hasHousehold: false,
-  }), false);
+test('opens the app once the shared kitchen is ready', () => {
+  assert.equal(getKitchenAccessState({ ...base, status: 'synced', hasHousehold: true }), 'ready');
 });
 
-test('shows the retry state instead of an endless loader after an initialization error', () => {
-  assert.equal(shouldShowKitchenLoading({
-    configured: true,
-    status: 'error',
-    hasSession: true,
-    hasHousehold: false,
-  }), false);
+test('opens in local mode when Supabase is not configured', () => {
+  assert.equal(getKitchenAccessState({ ...base, configured: false, status: 'not-configured' }), 'ready');
+});
+
+test('shows the retry state instead of an endless loader after an error', () => {
+  assert.equal(getKitchenAccessState({ ...base, status: 'error' }), 'error');
+  assert.equal(getKitchenAccessState({ ...base, status: 'pending', hasError: true }), 'error');
 });
