@@ -187,6 +187,13 @@ function expiryLabel(item: InventoryItem, language: AppLanguage) {
   return language === 'zh' ? `还可存放 ${item.daysLeft} 天` : `${item.daysLeft} days remaining`;
 }
 
+/** 加入购物清单时的默认数量：克 500、毫升 1000，其余 1 */
+function restockQuantity(unit: string) {
+  if (['克', 'g'].includes(unit)) return 500;
+  if (['毫升', 'mL', 'ml'].includes(unit)) return 1000;
+  return 1;
+}
+
 /** 快速调整的步长：克按 50、毫升按 100，其余按 1 */
 function quantityStep(unit: string) {
   if (['克', 'g'].includes(unit)) return 50;
@@ -200,7 +207,12 @@ type InventorySwipeRowProps = {
   showStorageBadge: boolean;
   libraryColor: string;
   onDecrease: () => void;
+  onIncrease: () => void;
   onFinish: () => void;
+  /** 长按进入多选后为 true：点击行切换选中，滑动和快捷按钮暂停 */
+  selectionMode: boolean;
+  selected: boolean;
+  onLongPress: () => void;
   onOpen: (methods: SwipeableMethods) => void;
   onClose: (methods: SwipeableMethods) => void;
   onPress: () => void;
@@ -213,7 +225,11 @@ function InventorySwipeRow({
   showStorageBadge,
   libraryColor,
   onDecrease,
+  onIncrease,
   onFinish,
+  selectionMode,
+  selected,
+  onLongPress,
   onOpen,
   onClose,
   onPress,
@@ -232,6 +248,8 @@ function InventorySwipeRow({
       overshootLeft={false}
       overshootRight={false}
       enableTrackpadTwoFingerGesture
+      enabled={!selectionMode}
+      leftThreshold={42}
       containerStyle={styles.swipeableRow}
       childrenContainerStyle={styles.swipeableContent}
       onSwipeableWillOpen={() => {
@@ -240,29 +258,71 @@ function InventorySwipeRow({
       onSwipeableClose={() => {
         if (swipeableRef.current) onClose(swipeableRef.current);
       }}
-      renderRightActions={(_, __, methods) => (
+      // 右滑：露出「＋N」，补货一键加
+      renderLeftActions={(_, __, methods) => (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={text(`删除${item.name}`, `Delete ${localizeContent(item.name, language)}`)}
+          accessibilityLabel={text(`${item.name}增加${quantityStep(item.unit)}`, `Add ${quantityStep(item.unit)} ${localizeContent(item.name, language)}`)}
           onPress={() => {
             methods.close();
-            onDelete();
+            onIncrease();
           }}
-          style={({ pressed }) => [styles.deleteAction, pressed && styles.deleteActionPressed]}>
-          <Ionicons name="trash-outline" size={22} color="#FFFFFF" />
-          <Text style={styles.deleteActionText}>{text('删除', 'Delete')}</Text>
+          style={({ pressed }) => [styles.swipeAction, styles.increaseAction, pressed && styles.swipeActionPressed]}>
+          <Ionicons name="add-circle-outline" size={22} color="#FFFFFF" />
+          <Text style={styles.deleteActionText}>＋{quantityStep(item.unit)}</Text>
         </Pressable>
+      )}
+      // 左滑：露出「用完」和「删除」
+      renderRightActions={(_, __, methods) => (
+        <View style={styles.swipeActionGroup}>
+          {item.quantity > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={text(`${item.name}已用完`, `${localizeContent(item.name, language)} finished`)}
+              onPress={() => {
+                methods.close();
+                onFinish();
+              }}
+              style={({ pressed }) => [styles.swipeAction, styles.finishAction, pressed && styles.swipeActionPressed]}>
+              <Ionicons name="checkmark-done-outline" size={22} color="#FFFFFF" />
+              <Text style={styles.deleteActionText}>{text('用完', 'Done')}</Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={text(`删除${item.name}`, `Delete ${localizeContent(item.name, language)}`)}
+            onPress={() => {
+              methods.close();
+              onDelete();
+            }}
+            style={({ pressed }) => [styles.deleteAction, pressed && styles.deleteActionPressed]}>
+            <Ionicons name="trash-outline" size={22} color="#FFFFFF" />
+            <Text style={styles.deleteActionText}>{text('删除', 'Delete')}</Text>
+          </Pressable>
+        </View>
       )}>
       <View style={styles.rowWrap}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={text(`查看${item.name}详情`, `View ${localizeContent(item.name, language)} details`)}
+        accessibilityLabel={selectionMode
+          ? text(`${selected ? '取消选择' : '选择'}${item.name}`, `${selected ? 'Deselect' : 'Select'} ${localizeContent(item.name, language)}`)
+          : text(`查看${item.name}详情`, `View ${localizeContent(item.name, language)} details`)}
+        accessibilityState={selectionMode ? { selected } : undefined}
+        accessibilityHint={selectionMode ? undefined : text('长按可多选', 'Long press to select several')}
         onPress={onPress}
+        onLongPress={selectionMode ? undefined : onLongPress}
+        delayLongPress={450}
         style={({ pressed }) => [
           styles.inventoryRow,
           item.quantity === 0 && styles.usedRow,
+          selected && styles.inventoryRowSelected,
           pressed && styles.inventoryRowPressed,
         ]}>
+        {selectionMode ? (
+          <View style={[styles.selectCircle, selected && styles.selectCircleOn]}>
+            {selected ? <Ionicons name="checkmark" size={16} color="#FFFFFF" /> : null}
+          </View>
+        ) : null}
         <View style={[styles.emojiBox, urgent && styles.urgentEmojiBox]}>
           <Text style={styles.emoji}>{item.emoji}</Text>
         </View>
@@ -297,15 +357,15 @@ function InventorySwipeRow({
             {formatQuantity(item.quantity)}
             <Text style={styles.quantityUnit}> {localizeContent(item.unit, language)}</Text>
           </Text>
-          {item.quantity > 0 ? (
-            <View style={styles.rowQuickSpacer} />
-          ) : (
+          {item.quantity <= 0 ? (
             <Text style={styles.detailHint}>{text('已用完', 'Finished')}</Text>
-          )}
+          ) : !selectionMode ? (
+            <View style={styles.rowQuickSpacer} />
+          ) : null}
         </View>
       </Pressable>
       {/* 快捷按钮放在整行可点区域之外，避免按钮套按钮 */}
-      {item.quantity > 0 ? (
+      {item.quantity > 0 && !selectionMode ? (
         <View style={styles.rowQuickActions}>
           <Pressable
             accessibilityRole="button"
@@ -339,6 +399,7 @@ export default function InventoryScreen() {
     inventory,
     recipes,
     getRecipeMatch,
+    addShoppingItem,
     transactions,
     libraries,
     storageLocations,
@@ -408,6 +469,27 @@ export default function InventoryScreen() {
   const showToast = useCallback((label: string, actionLabel: string, onAction: () => void) => {
     setToast({ id: Date.now(), label, actionLabel, onAction });
   }, []);
+
+  // 长按进入多选：可以批量加入购物清单或删除（删除的进入「最近删除」，可恢复）
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  function batchAddToShopping() {
+    const picked = inventory.filter((item) => selectedIds.includes(item.id));
+    picked.forEach((item) => addShoppingItem({
+      name: item.name,
+      nameEn: localizeContent(item.name, 'en'),
+      emoji: item.emoji,
+      quantity: restockQuantity(item.unit),
+      unit: item.unit,
+    }));
+    setSelectedIds([]);
+    showToast(text(`已把 ${picked.length} 样加入购物清单`, `Added ${picked.length} to shopping list`), text('查看', 'View'), () => setIsShoppingListOpen(true));
+  }
+  function batchDelete() {
+    const picked = inventory.filter((item) => selectedIds.includes(item.id));
+    picked.forEach((item) => deleteInventoryItem(item.id, 'deleted'));
+    setSelectedIds([]);
+    showToast(text(`已删除 ${picked.length} 样，可在「最近删除」恢复`, `Deleted ${picked.length}; restore from Recently deleted`), text('好的', 'OK'), () => undefined);
+  }
 
   // 快速添加常用食材：添加后提示能做几道菜
   const [justAddedName, setJustAddedName] = useState<string | null>(null);
@@ -1344,6 +1426,29 @@ export default function InventoryScreen() {
           </View>
         ) : null}
 
+        {!hasInventoryFilter ? (
+          <View style={styles.toolRow}>
+            {[
+              { key: 'planner', emoji: '📅', title: text('本周菜单', 'Weekly menu'), detail: text('按库存排 7 天三餐', 'Plan 7 days from stock'), href: '/planner' as const, tint: '#EAF4EE' },
+              { key: 'insights', emoji: '🌱', title: text('节约报告', 'Savings'), detail: text('吃完和丢弃记录', 'Finished vs. wasted'), href: '/insights' as const, tint: '#FFF4E4' },
+            ].map((tool) => (
+              <Pressable
+                key={tool.key}
+                accessibilityRole="button"
+                accessibilityLabel={tool.title}
+                onPress={() => router.push(tool.href)}
+                style={({ pressed }) => [styles.toolCard, { backgroundColor: tool.tint }, pressed && styles.pressed]}>
+                <Text style={styles.toolEmoji}>{tool.emoji}</Text>
+                <View style={styles.toolCopy}>
+                  <Text style={styles.toolTitle}>{tool.title}</Text>
+                  <Text style={styles.toolDetail} numberOfLines={1}>{tool.detail}</Text>
+                </View>
+                <Text style={styles.toolChevron}>›</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
         {!hasInventoryFilter && activeItems.length < 8 && starterItems.length > 0 ? (
           <View style={styles.starterCard}>
             <View style={styles.starterHeader}>
@@ -1420,7 +1525,14 @@ export default function InventoryScreen() {
                   showStorageBadge={!hasStorageFilter}
                   libraryColor={getLibraryColor(item.library)}
                   onDecrease={() => quickAdjust(item, -Math.min(quantityStep(item.unit), item.quantity))}
+                  onIncrease={() => quickAdjust(item, quantityStep(item.unit))}
                   onFinish={() => quickAdjust(item, -item.quantity)}
+                  selectionMode={selectedIds.length > 0}
+                  selected={selectedIds.includes(item.id)}
+                  onLongPress={() => {
+                    openSwipeableRef.current?.close();
+                    setSelectedIds([item.id]);
+                  }}
                   onOpen={(methods) => {
                     if (openSwipeableRef.current !== methods) openSwipeableRef.current?.close();
                     openSwipeableRef.current = methods;
@@ -1429,6 +1541,12 @@ export default function InventoryScreen() {
                     if (openSwipeableRef.current === methods) openSwipeableRef.current = null;
                   }}
                   onPress={() => {
+                    if (selectedIds.length > 0) {
+                      setSelectedIds((current) => current.includes(item.id)
+                        ? current.filter((id) => id !== item.id)
+                        : [...current, item.id]);
+                      return;
+                    }
                     openSwipeableRef.current?.close();
                     openItemDetails(item);
                   }}
@@ -3126,6 +3244,20 @@ export default function InventoryScreen() {
           onComplete={closeStorageCelebration}
         />
       ) : null}
+      {selectedIds.length > 0 ? (
+        <View style={[styles.batchBar, { bottom: Math.max(insets.bottom, 8) + 88 }]}>
+          <Text style={styles.batchCount}>{text(`已选 ${selectedIds.length} 项`, `${selectedIds.length} selected`)}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={text('批量加入购物清单', 'Add selected to shopping list')} onPress={batchAddToShopping} style={({ pressed }) => [styles.batchButton, pressed && styles.pressed]}>
+            <Text style={styles.batchButtonText}>{text('加入清单', 'To list')}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={text('批量删除', 'Delete selected')} onPress={batchDelete} style={({ pressed }) => [styles.batchButton, styles.batchDanger, pressed && styles.pressed]}>
+            <Text style={[styles.batchButtonText, styles.batchDangerText]}>{text('删除', 'Delete')}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={text('退出多选', 'Cancel selection')} onPress={() => setSelectedIds([])} hitSlop={6} style={({ pressed }) => [styles.batchClose, pressed && styles.pressed]}>
+            <Ionicons name="close" size={20} color="#FFFFFF" />
+          </Pressable>
+        </View>
+      ) : null}
       {toast ? (
         <View key={toast.id} pointerEvents="box-none" style={[styles.undoToast, { bottom: Math.max(insets.bottom, 8) + 92 }]}>
           <Text style={styles.undoToastText} numberOfLines={1}>{toast.label}</Text>
@@ -3396,6 +3528,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.danger,
   },
   deleteActionPressed: { backgroundColor: '#A53D36' },
+  swipeActionGroup: { flexDirection: 'row' },
+  swipeAction: { width: 88, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  swipeActionPressed: { opacity: 0.85 },
+  increaseAction: { backgroundColor: Colors.light.primary },
+  finishAction: { backgroundColor: '#3E8A66' },
+  inventoryRowSelected: { backgroundColor: Colors.light.backgroundSelected },
+  selectCircle: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center', borderRadius: 13, borderWidth: 2, borderColor: '#B9BFB7', backgroundColor: Colors.light.surface },
+  selectCircleOn: { borderColor: Colors.light.primary, backgroundColor: Colors.light.primary },
   deleteActionText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
   inventoryRowPressed: { backgroundColor: Colors.light.backgroundSelected },
   usedRow: { opacity: 0.45 },
@@ -3435,6 +3575,20 @@ const styles = StyleSheet.create({
   quantityColumn: { alignItems: 'flex-end', gap: 3 },
   detailHint: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '500' },
   rowWrap: { position: 'relative' },
+  toolRow: { flexDirection: 'row', gap: 10 },
+  batchBar: { position: 'absolute', left: 16, right: 16, alignSelf: 'center', maxWidth: 480, minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 18, paddingRight: 8, borderRadius: 22, backgroundColor: '#1E2420', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.24)' },
+  batchCount: { flex: 1, color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  batchButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 16, backgroundColor: 'rgba(255, 255, 255, 0.14)' },
+  batchButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  batchDanger: { backgroundColor: 'rgba(233, 118, 99, 0.22)' },
+  batchDangerText: { color: '#FFB4A6' },
+  batchClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22 },
+  toolCard: { flex: 1, minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.9)' },
+  toolEmoji: { fontSize: 24 },
+  toolCopy: { flex: 1, gap: 2 },
+  toolTitle: { color: Colors.light.text, fontSize: 15, fontWeight: '600' },
+  toolDetail: { color: Colors.light.textSecondary, fontSize: 12 },
+  toolChevron: { color: Colors.light.textSecondary, fontSize: 20 },
   starterCard: { gap: 14, padding: 18, borderRadius: 24, backgroundColor: 'rgba(255, 255, 255, 0.88)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.95)', boxShadow: '0 1px 2px rgba(30, 36, 32, 0.04), 0 8px 24px rgba(30, 36, 32, 0.06)' },
   starterHeader: { gap: 4 },
   starterTitle: { color: Colors.light.text, fontSize: 18, fontWeight: '600' },

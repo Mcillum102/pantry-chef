@@ -1,15 +1,25 @@
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppScreen, SectionHeader } from '@/components/app-screen';
+import { MemoryMatch } from '@/components/games/memory-match';
 import { Bobbing } from '@/components/motion';
 import { Colors, DisplayText, Shadows } from '@/constants/theme';
-import { MINI_GAMES } from '@/data/games';
+import { MINI_GAMES, type MiniGame } from '@/data/games';
+
+/** 内置游戏组件：id 对应 MiniGame.screen */
+const GAME_SCREENS: Record<NonNullable<MiniGame['screen']>, (props: { onClose: () => void }) => React.JSX.Element> = {
+  memory: MemoryMatch,
+};
 
 export default function GamesScreen() {
   const router = useRouter();
+  const [activeGame, setActiveGame] = useState<MiniGame['screen'] | null>(null);
+  const ActiveGame = activeGame ? GAME_SCREENS[activeGame] : null;
 
   return (
+    <>
     <AppScreen
       eyebrow="休息一下"
       title="小游戏"
@@ -29,19 +39,22 @@ export default function GamesScreen() {
           <SectionHeader title="全部游戏" detail={`${MINI_GAMES.length} 个`} />
           <View style={styles.grid}>
             {MINI_GAMES.map((game) => {
-              const href = game.href;
+              const playable = Boolean(game.href || game.screen);
               return (
                 <Pressable
                   key={game.id}
                   accessibilityRole="button"
-                  accessibilityLabel={game.name}
-                  disabled={!href}
-                  onPress={() => href && router.push(href)}
-                  style={({ pressed }) => [styles.gameCard, !href && styles.disabled, pressed && styles.pressed]}>
+                  accessibilityLabel={playable ? `开始${game.name}` : game.name}
+                  disabled={!playable}
+                  onPress={() => {
+                    if (game.screen) setActiveGame(game.screen);
+                    else if (game.href) router.push(game.href);
+                  }}
+                  style={({ pressed }) => [styles.gameCard, !playable && styles.disabled, pressed && styles.pressed]}>
                   <Text style={styles.gameEmoji}>{game.emoji}</Text>
                   <Text style={styles.gameName}>{game.name}</Text>
                   <Text style={styles.gameDescription} numberOfLines={2}>{game.description}</Text>
-                  {!href ? <Text style={styles.comingSoon}>即将上线</Text> : null}
+                  <Text style={styles.comingSoon}>{playable ? '开始玩 →' : '即将上线'}</Text>
                 </Pressable>
               );
             })}
@@ -49,6 +62,10 @@ export default function GamesScreen() {
         </View>
       )}
     </AppScreen>
+    <Modal visible={Boolean(ActiveGame)} animationType="slide" onRequestClose={() => setActiveGame(null)}>
+      {ActiveGame ? <ActiveGame onClose={() => setActiveGame(null)} /> : null}
+    </Modal>
+    </>
   );
 }
 
@@ -73,7 +90,7 @@ const styles = StyleSheet.create({
   gameCard: {
     flexGrow: 1,
     flexBasis: 150,
-    minHeight: 150,
+    minHeight: 160,
     gap: 6,
     padding: 16,
     borderRadius: 23,

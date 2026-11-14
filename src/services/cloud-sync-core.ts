@@ -66,6 +66,12 @@ export function createCloudSyncApi(client: SupabaseClient | null) {
       return () => data.subscription.unsubscribe();
     },
 
+    /** 修改当前登录账号的密码（即厨房口令）。其他已登录的设备不受影响 */
+    async updatePassword(password: string) {
+      const { error } = await requireClient(client).auth.updateUser({ password });
+      if (error) throw error;
+    },
+
     async signInWithPassword(email: string, password: string) {
       const { data, error } = await requireClient(client).auth.signInWithPassword({
         email: email.trim().toLocaleLowerCase(),

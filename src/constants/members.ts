@@ -6,8 +6,8 @@ export type KitchenMember = {
 };
 
 export const KITCHEN_MEMBERS: readonly KitchenMember[] = [
-  { id: 'a', name: process.env.EXPO_PUBLIC_MEMBER_A_NAME || 'Shuhan', emoji: '🧑‍🍳' },
-  { id: 'b', name: process.env.EXPO_PUBLIC_MEMBER_B_NAME || '宝贝', emoji: '👩‍🍳' },
+  { id: 'a', name: process.env.EXPO_PUBLIC_MEMBER_A_NAME || '丁丁', emoji: '🧑‍🍳' },
+  { id: 'b', name: process.env.EXPO_PUBLIC_MEMBER_B_NAME || '小林', emoji: '👩‍🍳' },
 ];
 
 export function findKitchenMember(id: string | null | undefined) {

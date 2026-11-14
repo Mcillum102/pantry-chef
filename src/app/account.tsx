@@ -1,13 +1,15 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AppScreen, SectionHeader } from '@/components/app-screen';
 import { Colors } from '@/constants/theme';
 import { useCloudSync } from '@/context/cloud-sync-context';
 import { useLanguage } from '@/context/language-context';
 import { useMember } from '@/context/member-context';
+import { evaluatePasscode } from '@/data/passcode-utils';
+import { changeKitchenPasscode } from '@/services/cloud-sync';
 
 export default function AccountScreen() {
   const router = useRouter();
@@ -24,6 +26,26 @@ export default function AccountScreen() {
   } = useCloudSync();
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [newPasscode, setNewPasscode] = useState('');
+  const [confirmPasscode, setConfirmPasscode] = useState('');
+  const strength = evaluatePasscode(newPasscode);
+  const passcodeReady = strength.level > 0 && newPasscode === confirmPasscode;
+
+  async function savePasscode() {
+    if (!passcodeReady || busy) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await changeKitchenPasscode(newPasscode);
+      setNewPasscode('');
+      setConfirmPasscode('');
+      setNotice(text('厨房口令已修改。已经登录的手机不受影响，下次需要登录时用新口令。', 'Passcode changed. Signed-in phones stay signed in.'));
+    } catch {
+      setNotice(text('没有改成功，请检查网络后再试。', 'Could not change the passcode. Check your connection.'));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const statusText = useMemo(() => {
     if (!configured) return text('本地模式', 'Local only');
@@ -125,12 +147,87 @@ export default function AccountScreen() {
         ) : null}
       </View>
 
+      {configured ? (
+        <View style={styles.section}>
+          <SectionHeader title={text('修改厨房口令', 'Change kitchen passcode')} />
+          <View style={styles.passcodeCard}>
+            <Text style={styles.cardText}>
+              {text('两台手机共用这个口令。改完后，已经登录的手机不受影响；新设备或重新登录时用新口令。', 'Both phones share this passcode. Signed-in phones stay signed in.')}
+            </Text>
+            <TextInput
+              accessibilityLabel={text('新口令', 'New passcode')}
+              value={newPasscode}
+              onChangeText={setNewPasscode}
+              placeholder={text('新口令', 'New passcode')}
+              placeholderTextColor="#A2A79F"
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              style={styles.passcodeInput}
+            />
+            {newPasscode ? (
+              <View style={styles.strengthRow}>
+                <View style={styles.strengthTrack}>
+                  {[1, 2, 3].map((level) => (
+                    <View
+                      key={level}
+                      style={[styles.strengthSegment, strength.level >= level && { backgroundColor: STRENGTH_COLORS[strength.level] }]}
+                    />
+                  ))}
+                </View>
+                <Text style={[styles.strengthLabel, { color: STRENGTH_COLORS[strength.level] }]}>{strength.label}</Text>
+              </View>
+            ) : (
+              <Text style={styles.strengthTip}>{text('建议 8 位以上，混合字母、数字或符号，例如「番茄炒蛋-Weekend-8」。', 'Use 8+ characters mixing letters, numbers or symbols.')}</Text>
+            )}
+            {newPasscode && strength.tips.length > 0 ? (
+              <Text style={styles.strengthTip}>{strength.tips.join(' · ')}</Text>
+            ) : null}
+            <TextInput
+              accessibilityLabel={text('再输一次新口令', 'Confirm new passcode')}
+              value={confirmPasscode}
+              onChangeText={setConfirmPasscode}
+              placeholder={text('再输一次', 'Confirm')}
+              placeholderTextColor="#A2A79F"
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              style={styles.passcodeInput}
+            />
+            {confirmPasscode && confirmPasscode !== newPasscode ? (
+              <Text style={styles.mismatch}>{text('两次输入不一样', 'Passcodes do not match')}</Text>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              disabled={!passcodeReady || busy}
+              onPress={() => void savePasscode()}
+              style={({ pressed }) => [styles.primaryButton, (!passcodeReady || busy) && styles.disabled, pressed && styles.pressed]}>
+              <Text style={styles.primaryButtonText}>{text('保存新口令', 'Save passcode')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
       {notice ? <View style={styles.notice}><Text style={styles.noticeText}>{notice}</Text></View> : null}
     </AppScreen>
   );
 }
 
+const STRENGTH_COLORS = ['#B95544', '#C98A1E', '#5E9A6F', '#2E6B4F'] as const;
+
 const styles = StyleSheet.create({
+  passcodeCard: { gap: 10, padding: 16, borderRadius: 22, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
+  passcodeInput: { minHeight: 50, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: Colors.light.border, backgroundColor: Colors.light.background, color: Colors.light.text, fontSize: 16 },
+  strengthRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  strengthTrack: { flex: 1, flexDirection: 'row', gap: 4 },
+  strengthSegment: { flex: 1, height: 6, borderRadius: 3, backgroundColor: Colors.light.backgroundElement },
+  strengthLabel: { width: 36, fontSize: 13, fontWeight: '600', textAlign: 'right' },
+  strengthTip: { color: Colors.light.textSecondary, fontSize: 12.5, lineHeight: 18 },
+  mismatch: { color: Colors.light.danger, fontSize: 12.5, fontWeight: '500' },
   pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
   disabled: { opacity: 0.42 },
   flex: { flex: 1 },

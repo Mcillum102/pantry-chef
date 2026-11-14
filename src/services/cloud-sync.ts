@@ -35,6 +35,7 @@ export const {
   pushHouseholdSnapshot,
   signInWithPassword,
   subscribeToCloudAuth,
+  updatePassword: changeKitchenPasscode,
   subscribeToHouseholdSnapshot,
 } = cloudApi;
 
