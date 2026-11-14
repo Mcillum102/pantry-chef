@@ -106,7 +106,7 @@ export async function refreshRoutineNotifications(
         ...time,
         title: language === 'zh' ? `🍽️ 该记录${mealLabels[meal]}了` : `🍽️ Time to log ${mealLabels[meal]}`,
         body: language === 'zh' ? '记录吃了什么，下一餐推荐会更准确。' : 'Log what you ate to improve the next recommendation.',
-        url: '/recommend',
+        url: '/',
       });
     }
   }
@@ -123,7 +123,7 @@ export async function refreshRoutineNotifications(
         ...time,
         title: language === 'zh' ? '💧 喝点水吧' : '💧 Time for some water',
         body: language === 'zh' ? '补充饮水后，顺手记录今天的饮水量。' : 'Hydrate and add it to today’s water log.',
-        url: '/recommend',
+        url: '/',
       });
     }
   }
@@ -138,7 +138,7 @@ export async function refreshRoutineNotifications(
         ...shoppingTime,
         title: language === 'zh' ? `🛒 购物清单还有 ${uncheckedShoppingCount} 项` : `🛒 ${uncheckedShoppingCount} shopping items left`,
         body: language === 'zh' ? '出门前看看还需要买什么。' : 'Check your list before heading out.',
-        url: '/inventory',
+        url: '/',
       });
     }
   }

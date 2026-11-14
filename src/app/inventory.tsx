@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Image,
@@ -185,10 +186,20 @@ function expiryLabel(item: InventoryItem, language: AppLanguage) {
   return language === 'zh' ? `还可存放 ${item.daysLeft} 天` : `${item.daysLeft} days remaining`;
 }
 
+/** 快速调整的步长：克按 50、毫升按 100，其余按 1 */
+function quantityStep(unit: string) {
+  if (['克', 'g'].includes(unit)) return 50;
+  if (['毫升', 'mL', 'ml'].includes(unit)) return 100;
+  return 1;
+}
+
 type InventorySwipeRowProps = {
   item: InventoryItem;
   showLibraryBadge: boolean;
+  showStorageBadge: boolean;
   libraryColor: string;
+  onDecrease: () => void;
+  onFinish: () => void;
   onOpen: (methods: SwipeableMethods) => void;
   onClose: (methods: SwipeableMethods) => void;
   onPress: () => void;
@@ -198,7 +209,10 @@ type InventorySwipeRowProps = {
 function InventorySwipeRow({
   item,
   showLibraryBadge,
+  showStorageBadge,
   libraryColor,
+  onDecrease,
+  onFinish,
   onOpen,
   onClose,
   onPress,
@@ -238,6 +252,7 @@ function InventorySwipeRow({
           <Text style={styles.deleteActionText}>{text('删除', 'Delete')}</Text>
         </Pressable>
       )}>
+      <View style={styles.rowWrap}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={text(`查看${item.name}详情`, `View ${localizeContent(item.name, language)} details`)}
@@ -264,11 +279,13 @@ function InventorySwipeRow({
                 </Text>
               </View>
             ) : null}
-            <View style={[styles.storageBadge, urgent && styles.urgentBadge]}>
-              <Text style={[styles.storageText, urgent && styles.urgentText]}>
-                {localizeContent(item.storage, language)}
-              </Text>
-            </View>
+            {showStorageBadge ? (
+              <View style={[styles.storageBadge, urgent && styles.urgentBadge]}>
+                <Text style={[styles.storageText, urgent && styles.urgentText]}>
+                  {localizeContent(item.storage, language)}
+                </Text>
+              </View>
+            ) : null}
           </View>
           <Text style={[styles.expiryText, urgent && styles.expiryUrgent]}>
             {expiryLabel(item, language)}
@@ -279,14 +296,41 @@ function InventorySwipeRow({
             {formatQuantity(item.quantity)}
             <Text style={styles.quantityUnit}> {localizeContent(item.unit, language)}</Text>
           </Text>
-          <Text style={styles.detailHint}>{text('详情 ›', 'Details ›')}</Text>
+          {item.quantity > 0 ? (
+            <View style={styles.rowQuickSpacer} />
+          ) : (
+            <Text style={styles.detailHint}>{text('已用完', 'Finished')}</Text>
+          )}
         </View>
       </Pressable>
+      {/* 快捷按钮放在整行可点区域之外，避免按钮套按钮 */}
+      {item.quantity > 0 ? (
+        <View style={styles.rowQuickActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={text(`${item.name}减少${quantityStep(item.unit)}`, `Use ${quantityStep(item.unit)} of ${localizeContent(item.name, language)}`)}
+            hitSlop={6}
+            onPress={onDecrease}
+            style={({ pressed }) => [styles.rowQuickButton, pressed && styles.rowQuickButtonPressed]}>
+            <Text style={styles.rowQuickButtonText}>−{quantityStep(item.unit)}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={text(`${item.name}已用完`, `${localizeContent(item.name, language)} finished`)}
+            hitSlop={6}
+            onPress={onFinish}
+            style={({ pressed }) => [styles.rowQuickButton, styles.rowFinishButton, pressed && styles.rowQuickButtonPressed]}>
+            <Text style={[styles.rowQuickButtonText, styles.rowFinishButtonText]}>{text('用完', 'Done')}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      </View>
     </Swipeable>
   );
 }
 
 export default function InventoryScreen() {
+  const router = useRouter();
   const { language, locale, text } = useLanguage();
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
@@ -350,6 +394,26 @@ export default function InventoryScreen() {
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [isDetailEditing, setIsDetailEditing] = useState(false);
   const [disposalItem, setDisposalItem] = useState<InventoryItem | null>(null);
+  // 列表里的「−1 / 用完」：操作后显示 4 秒撤销提示，防止误触
+  const [undoAction, setUndoAction] = useState<{ itemId: string; delta: number; label: string } | null>(null);
+  useEffect(() => {
+    if (!undoAction) return;
+    const timer = setTimeout(() => setUndoAction(null), 4000);
+    return () => clearTimeout(timer);
+  }, [undoAction]);
+  function quickAdjust(item: InventoryItem, delta: number) {
+    if (!delta) return;
+    adjustInventoryQuantity(item.id, delta);
+    const name = localizeContent(item.name, language);
+    const finished = item.quantity + delta <= 0;
+    setUndoAction({
+      itemId: item.id,
+      delta,
+      label: finished
+        ? text(`「${name}」已用完`, `${name} finished`)
+        : text(`「${name}」减少了 ${formatQuantity(-delta)} ${item.unit}`, `Used ${formatQuantity(-delta)} ${item.unit} of ${name}`),
+    });
+  }
   const [storageCelebration, setStorageCelebration] = useState<StorageCelebrationData | null>(null);
   const pendingStorageCelebrationRef = useRef<StorageCelebrationData | null>(null);
   const [isCreatingLibrary, setIsCreatingLibrary] = useState(false);
@@ -372,14 +436,11 @@ export default function InventoryScreen() {
     ],
   }));
 
+  // 添加菜单是底部弹出的面板：从下往上滑入，单手更好够到
   const addMenuStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(addMenuProgress.value, [0, 0.2, 1], [0, 0.72, 1], Extrapolation.CLAMP),
+    opacity: interpolate(addMenuProgress.value, [0, 0.3, 1], [0, 0.9, 1], Extrapolation.CLAMP),
     transform: [
-      { translateY: interpolate(addMenuProgress.value, [0, 1], [-12, 0], Extrapolation.CLAMP) },
-      { scale: interpolate(addMenuProgress.value, [0, 1], [0.82, 1], Extrapolation.CLAMP) },
-      {
-        rotate: `${interpolate(addMenuProgress.value, [0, 1], [-7, 0], Extrapolation.CLAMP)}deg`,
-      },
+      { translateY: interpolate(addMenuProgress.value, [0, 1], [80, 0], Extrapolation.CLAMP) },
     ],
   }));
 
@@ -599,8 +660,8 @@ export default function InventoryScreen() {
     addMenuProgress.set(0);
     addMenuProgress.set(
       withTiming(1, {
-        duration: 280,
-        easing: Easing.out(Easing.back(1.55)),
+        duration: 300,
+        easing: Easing.out(Easing.cubic),
       })
     );
   }
@@ -619,6 +680,14 @@ export default function InventoryScreen() {
     addMenuProgress.set(0);
     setIsAddMenuOpen(false);
     openAddItem();
+  }
+
+  function openScanAdd() {
+    addMenuProgress.set(0);
+    setIsAddMenuOpen(false);
+    openAddItem();
+    // 等添加表单弹出后再打开相机，避免两个弹窗同时出现
+    setTimeout(() => setIsScannerOpen(true), 450);
   }
 
   function openSmartAdd() {
@@ -1231,6 +1300,14 @@ export default function InventoryScreen() {
                 {expiryLabel(expiringItems[0], language)}
                 {text('，建议优先安排使用，避免过期浪费。', '. Plan to use it soon to avoid waste.')}
               </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={text(`看看用${expiringItems[0].name}能做什么菜`, `Find recipes with ${localizeContent(expiringItems[0].name, language)}`)}
+                onPress={() => router.push({ pathname: '/recipes', params: { q: expiringItems[0].name } })}
+                style={({ pressed }) => [styles.noticeAction, pressed && styles.pressed]}>
+                <Text style={styles.noticeActionText}>{text('看看能做什么菜', 'Find recipes')}</Text>
+                <Text style={styles.noticeActionArrow}>→</Text>
+              </Pressable>
             </View>
           </View>
         ) : null}
@@ -1281,7 +1358,10 @@ export default function InventoryScreen() {
                   key={item.id}
                   item={item}
                   showLibraryBadge={selectedLibrary === '全部'}
+                  showStorageBadge={!hasStorageFilter}
                   libraryColor={getLibraryColor(item.library)}
+                  onDecrease={() => quickAdjust(item, -Math.min(quantityStep(item.unit), item.quantity))}
+                  onFinish={() => quickAdjust(item, -item.quantity)}
                   onOpen={(methods) => {
                     if (openSwipeableRef.current !== methods) openSwipeableRef.current?.close();
                     openSwipeableRef.current = methods;
@@ -1356,10 +1436,28 @@ export default function InventoryScreen() {
         transparent
         animationType="none"
         onRequestClose={closeAddModeMenu}>
-        <View style={[styles.addModeBackdrop, { paddingTop: Math.max(insets.top, 12) + 58 }]}>
-          <Pressable style={StyleSheet.absoluteFillObject} onPress={closeAddModeMenu} />
-          <Animated.View style={[styles.addModeSheet, addMenuStyle]}>
+        <View style={styles.addModeBackdrop}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={text('关闭添加菜单', 'Close add menu')}
+            style={StyleSheet.absoluteFillObject}
+            onPress={closeAddModeMenu}
+          />
+          <Animated.View style={[styles.addModeSheet, { paddingBottom: Math.max(insets.bottom, 12) + 12 }, addMenuStyle]}>
+            <View style={styles.addModeHandle} />
             <Text style={styles.addModeTitle}>{text('添加食材', 'Add inventory')}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={text('扫码添加食材', 'Scan to add')}
+              onPress={openScanAdd}
+              style={styles.addModeOption}>
+              <View style={styles.addModeIcon}><Ionicons name="barcode-outline" size={22} color={Colors.light.primary} /></View>
+              <View style={styles.addModeCopy}>
+                <Text style={styles.addModeOptionTitle}>{text('扫码添加', 'Scan barcode')}</Text>
+                <Text style={styles.addModeOptionText}>{text('扫商品条形码，自动带出名称', 'Scan a product barcode to fill in the name')}</Text>
+              </View>
+              <Text style={styles.addModeChevron}>›</Text>
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={text('基础添加食材', 'Basic inventory add')}
@@ -1383,6 +1481,13 @@ export default function InventoryScreen() {
                 <Text style={styles.addModeOptionText}>{text('输入一段话，自动识别买了什么', 'Describe your shopping in one sentence')}</Text>
               </View>
               <Text style={styles.addModeChevron}>›</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={text('取消', 'Cancel')}
+              onPress={closeAddModeMenu}
+              style={({ pressed }) => [styles.addModeCancel, pressed && styles.pressed]}>
+              <Text style={styles.addModeCancelText}>{text('取消', 'Cancel')}</Text>
             </Pressable>
           </Animated.View>
         </View>
@@ -2958,6 +3063,21 @@ export default function InventoryScreen() {
           onComplete={closeStorageCelebration}
         />
       ) : null}
+      {undoAction ? (
+        <View pointerEvents="box-none" style={[styles.undoToast, { bottom: Math.max(insets.bottom, 8) + 92 }]}>
+          <Text style={styles.undoToastText} numberOfLines={1}>{undoAction.label}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={text('撤销', 'Undo')}
+            onPress={() => {
+              adjustInventoryQuantity(undoAction.itemId, -undoAction.delta);
+              setUndoAction(null);
+            }}
+            style={({ pressed }) => [styles.undoToastButton, pressed && styles.pressed]}>
+            <Text style={styles.undoToastButtonText}>{text('撤销', 'Undo')}</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </>
   );
 }
@@ -3140,6 +3260,9 @@ const styles = StyleSheet.create({
   noticeCopy: { flex: 1, gap: 2 },
   noticeTitle: { color: Colors.light.text, fontSize: 15, fontWeight: '600' },
   noticeText: { color: Colors.light.warning, fontSize: 13, lineHeight: 19 },
+  noticeAction: { alignSelf: 'flex-start', minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: '#FFFFFF' },
+  noticeActionText: { color: Colors.light.primary, fontSize: 13, fontWeight: '600' },
+  noticeActionArrow: { color: Colors.light.primary, fontSize: 14, fontWeight: '600' },
   section: { gap: Spacing.three },
   listToolbar: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   listToolbarLabel: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '600' },
@@ -3247,7 +3370,19 @@ const styles = StyleSheet.create({
   quantity: { color: Colors.light.text, fontSize: 18, fontWeight: '600' },
   quantityUnit: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '500' },
   quantityColumn: { alignItems: 'flex-end', gap: 3 },
-  detailHint: { color: Colors.light.primary, fontSize: 11.5, fontWeight: '500' },
+  detailHint: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '500' },
+  rowWrap: { position: 'relative' },
+  rowQuickSpacer: { width: 108, height: 36 },
+  rowQuickActions: { position: 'absolute', right: 14, bottom: 12, flexDirection: 'row', gap: 6 },
+  rowQuickButton: { minWidth: 44, height: 32, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: Colors.light.backgroundElement },
+  rowQuickButtonPressed: { opacity: 0.7, transform: [{ scale: 0.95 }] },
+  rowQuickButtonText: { color: Colors.light.text, fontSize: 13, fontWeight: '600' },
+  rowFinishButton: { backgroundColor: Colors.light.primarySoft },
+  rowFinishButtonText: { color: Colors.light.primary },
+  undoToast: { position: 'absolute', left: 16, right: 16, alignSelf: 'center', maxWidth: 440, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 18, paddingRight: 6, borderRadius: 18, backgroundColor: '#1E2420', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.22)' },
+  undoToastText: { flex: 1, color: '#FFFFFF', fontSize: 14, fontWeight: '500' },
+  undoToastButton: { minHeight: 44, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderRadius: 14 },
+  undoToastButtonText: { color: '#9FD8B5', fontSize: 14, fontWeight: '600' },
   modalPage: { flex: 1, backgroundColor: Colors.light.background },
   modalHeader: {
     minHeight: 68,
@@ -3746,10 +3881,12 @@ const styles = StyleSheet.create({
   smartSuccessIcon: { width: 29, height: 29, overflow: 'hidden', textAlign: 'center', lineHeight: 29, borderRadius: 15, color: '#FFFFFF', backgroundColor: '#735C9B', fontSize: 14, fontWeight: '600' },
   smartSuccessText: { flex: 1, color: '#654D8B', fontSize: 12, fontWeight: '600' },
   smartSuccessClose: { color: '#735C9B', fontSize: 20 },
-  addModeBackdrop: { flex: 1, alignItems: 'flex-end', paddingHorizontal: 14, backgroundColor: '#16221C38' },
-  addModeSheet: { width: 286, gap: 8, padding: 11, borderRadius: 22, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: '#FFFFFF', shadowColor: '#173D2F', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 24, elevation: 8 },
+  addModeBackdrop: { flex: 1, justifyContent: 'flex-end', alignItems: 'center', backgroundColor: 'rgba(22, 34, 28, 0.32)' },
+  addModeSheet: { width: '100%', maxWidth: 520, gap: 10, paddingTop: 10, paddingHorizontal: 16, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: Colors.light.surface, boxShadow: '0 -8px 30px rgba(23, 61, 47, 0.16)' },
   addModeHandle: { width: 42, height: 4, alignSelf: 'center', borderRadius: 2, backgroundColor: Colors.light.border, marginBottom: 3 },
-  addModeTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '600', paddingHorizontal: 5, paddingTop: 2, paddingBottom: 1 },
+  addModeTitle: { color: Colors.light.text, fontSize: 18, fontWeight: '600', paddingHorizontal: 4, paddingTop: 2, paddingBottom: 2 },
+  addModeCancel: { minHeight: 50, alignItems: 'center', justifyContent: 'center', marginTop: 2, borderRadius: 16, backgroundColor: Colors.light.backgroundElement },
+  addModeCancelText: { color: Colors.light.text, fontSize: 16, fontWeight: '500' },
   addModeSubtitle: { color: Colors.light.textSecondary, fontSize: 12.5, marginBottom: 3 },
   addModeOption: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 16, backgroundColor: Colors.light.background, borderWidth: 1, borderColor: Colors.light.border },
   addModeOptionAi: { backgroundColor: '#F5F1FF', borderColor: '#D7CBF2' },

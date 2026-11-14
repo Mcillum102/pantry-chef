@@ -53,10 +53,9 @@ export type AppTabConfig = {
 
 /** 底部 Tab 栏里可以左右滑动的入口，按顺序显示。新增入口加在这里。 */
 export const SCROLLABLE_TABS: readonly AppTabConfig[] = [
-  { name: 'home', href: '/', label: '首页', icon: 'home-outline', selectedIcon: 'home' },
-  { name: 'inventory', href: '/inventory', label: '库存', icon: 'fridge-outline', selectedIcon: 'fridge' },
+  // 首页暂时下线，「库存」放在 / 上，打开 App 就是库存页
+  { name: 'index', href: '/', label: '库存', icon: 'fridge-outline', selectedIcon: 'fridge' },
   { name: 'recipes', href: '/recipes', label: '菜谱', icon: 'book-open-outline', selectedIcon: 'book-open-variant' },
-  { name: 'recommend', href: '/recommend', label: '健康', icon: 'heart-pulse', selectedIcon: 'heart-pulse' },
   { name: 'games', href: '/games' as Href, label: '游戏', icon: 'gamepad-variant-outline', selectedIcon: 'gamepad-variant' },
 ];
 
@@ -71,6 +70,8 @@ export const PINNED_TAB: AppTabConfig = {
 
 /** 不显示在 Tab 栏、但需要保留路由的页面 */
 const HIDDEN_TABS: readonly { name: string; href: Href }[] = [
+  // 旧地址 /inventory 仍可打开（通知、书签）
+  { name: 'inventory', href: '/inventory' },
   { name: 'planner', href: '/planner' },
   { name: 'insights', href: '/insights' },
   { name: 'widgets', href: '/widgets' },

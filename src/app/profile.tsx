@@ -154,6 +154,28 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.section}>
+        <SectionHeader title={text('厨房工具', 'Kitchen tools')} />
+        {[
+          { key: 'planner', emoji: '📅', title: text('本周菜单', 'Weekly menu'), detail: text('按库存生成 7 天三餐，缺的食材一键加入购物清单', 'Plan 7 days from your stock and add missing items to shopping'), href: '/planner' as Href },
+          { key: 'insights', emoji: '🌱', title: text('节约报告', 'Savings report'), detail: text('查看吃完与丢弃记录，减少浪费', 'See what was finished or thrown away'), href: '/insights' as Href },
+        ].map((tool) => (
+          <Pressable
+            key={tool.key}
+            accessibilityRole="button"
+            accessibilityLabel={tool.title}
+            onPress={() => router.push(tool.href)}
+            style={({ pressed }) => [styles.widgetSettingsCard, pressed && styles.pressed]}>
+            <View style={styles.widgetSettingsIcon}><Text style={styles.widgetSettingsEmoji}>{tool.emoji}</Text></View>
+            <View style={styles.widgetSettingsCopy}>
+              <Text style={styles.widgetSettingsTitle}>{tool.title}</Text>
+              <Text style={styles.widgetSettingsText}>{tool.detail}</Text>
+            </View>
+            <Text style={styles.widgetSettingsChevron}>›</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <View style={styles.section}>
         <SectionHeader title={text('偏好设置', 'Preferences')} />
         <Pressable
           accessibilityRole="button"
@@ -180,7 +202,7 @@ export default function ProfileScreen() {
           <View style={styles.widgetSettingsIcon}><Text style={styles.widgetSettingsEmoji}>📱</Text></View>
           <View style={styles.widgetSettingsCopy}>
             <Text style={styles.widgetSettingsTitle}>{text('iOS 小组件', 'iOS widgets')}</Text>
-            <Text style={styles.widgetSettingsText}>{text('预览并选择临期库存、饮水量和烹饪倒计时', 'Preview expiry, hydration, and cooking timer widgets')}</Text>
+            <Text style={styles.widgetSettingsText}>{text('预览并选择临期库存和烹饪倒计时', 'Preview expiry and cooking timer widgets')}</Text>
           </View>
           <Text style={styles.widgetSettingsBadge}>{text('已准备', 'READY')}</Text>
           <Text style={styles.widgetSettingsChevron}>›</Text>

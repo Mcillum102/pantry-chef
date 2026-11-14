@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
+import { useLocalSearchParams } from 'expo-router';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import {
   Image,
   KeyboardAvoidingView,
@@ -113,12 +115,6 @@ const mealOptions: { key: MealType; zh: string; en: string; emoji: string }[] = 
   { key: 'dinner', zh: '晚餐', en: 'Dinner', emoji: '🌙' },
   { key: 'snack', zh: '加餐', en: 'Snack', emoji: '🍎' },
 ];
-const mealTimePresets: Record<MealType, string[]> = {
-  breakfast: ['07:30', '08:00', '09:00'],
-  lunch: ['12:00', '12:30', '13:00'],
-  dinner: ['18:00', '19:00', '20:00'],
-  snack: ['10:30', '15:30', '21:00'],
-};
 
 function currentMealType(): MealType {
   const hour = new Date().getHours();
@@ -180,6 +176,7 @@ export default function RecipesScreen() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('全部');
   const [showAllRecipes, setShowAllRecipes] = useState(false);
+  const { q: searchParam } = useLocalSearchParams<{ q?: string }>();
   const [isAiOrganizing, setIsAiOrganizing] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
@@ -189,6 +186,15 @@ export default function RecipesScreen() {
   const [isCompletionLogOpen, setIsCompletionLogOpen] = useState(false);
   const [isCloseCookingConfirmOpen, setIsCloseCookingConfirmOpen] = useState(false);
   const [isCooking, setIsCooking] = useState(false);
+
+  // 烹饪模式下保持屏幕常亮（手湿的时候不用去点亮屏幕）；不支持的浏览器会静默忽略
+  useEffect(() => {
+    if (!isCooking) return;
+    void activateKeepAwakeAsync('cooking-mode').catch(() => undefined);
+    return () => {
+      void deactivateKeepAwake('cooking-mode').catch(() => undefined);
+    };
+  }, [isCooking]);
   const [stepIndex, setStepIndex] = useState(0);
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
   const [isRecipeFormOpen, setIsRecipeFormOpen] = useState(false);
@@ -408,9 +414,27 @@ export default function RecipesScreen() {
     });
   }, [cookingHistory, libraryRecipes]);
 
+  // 能做的菜排在前面（库存匹配度从高到低，相同匹配度保持原顺序）
+  const sortedRecipes = useMemo(
+    () => visibleRecipes
+      .map((recipe, index) => ({ recipe, index, match: getRecipeMatch(recipe).percentage }))
+      .sort((a, b) => b.match - a.match || a.index - b.index)
+      .map((entry) => entry.recipe),
+    [getRecipeMatch, visibleRecipes]
+  );
+  const hasRecentRecipes = recentlyCookedRecipes.length > 0;
+
+  // 从库存页「看看能做什么菜」跳过来时，带着食材名直接搜索
+  useEffect(() => {
+    if (typeof searchParam !== 'string' || !searchParam.trim()) return;
+    setMajorLibrary('recipes');
+    setCategory('全部');
+    setSearch(searchParam.trim());
+  }, [searchParam]);
+  // 还没烧过菜时不显示空的「最近烧过」，直接列出菜谱
   const showingRecent =
-    majorLibrary === 'recipes' && category === '全部' && !search.trim() && !showAllRecipes;
-  const displayedRecipes = showingRecent ? recentlyCookedRecipes : visibleRecipes;
+    hasRecentRecipes && majorLibrary === 'recipes' && category === '全部' && !search.trim() && !showAllRecipes;
+  const displayedRecipes = showingRecent ? recentlyCookedRecipes : sortedRecipes;
   const sectionTitle = majorLibrary === 'baking'
     ? text('我的烘焙谱', 'My baking recipes')
     : showingRecent
@@ -942,7 +966,6 @@ export default function RecipesScreen() {
     const historyId = `cooking-history-${Date.now()}`;
     const mealFoods = recipe.name;
     const mealFoodsEn = localizeContent(recipe.name, 'en');
-    const selectedMeal = mealOptions.find((option) => option.key === mealType) ?? mealOptions[2];
     const carbsGrams = Math.round(recipe.carbsPerServing * servings);
     const existingMeal =
       mealType === 'snack'
@@ -998,8 +1021,8 @@ export default function RecipesScreen() {
 
     setCompletionMessage(
       text(
-        `已完成“${localizedName}”，并记录到 ${mealTime} 的${selectedMeal.zh}。`,
-        `Finished “${localizedName}” and logged it as ${selectedMeal.en.toLowerCase()} at ${mealTime}.`
+        `已完成“${localizedName}”，库存已更新。`,
+        `Finished “${localizedName}”. Stock updated.`
       )
     );
     setIsCompletionLogOpen(false);
@@ -1213,7 +1236,7 @@ export default function RecipesScreen() {
             title={sectionTitle}
             detail={text(`${displayedRecipes.length} 道菜`, `${displayedRecipes.length} recipes`)}
           />
-          {majorLibrary === 'recipes' && category === '全部' && !search.trim() ? (
+          {hasRecentRecipes && majorLibrary === 'recipes' && category === '全部' && !search.trim() ? (
             <Pressable
               accessibilityRole="button"
               onPress={() => setShowAllRecipes((current) => !current)}
@@ -1805,99 +1828,15 @@ export default function RecipesScreen() {
                     </View>
                     <View style={styles.completionLogHeroCopy}>
                       <Text style={styles.completionLogTitle}>
-                        {text('完成啦，记录到哪一餐？', 'All done. Log this meal')}
+                        {text('完成啦，确认更新库存？', 'All done. Update stock?')}
                       </Text>
                       <Text style={styles.completionLogSubtitle}>
                         {text(
-                          '选择实际用餐的餐次和时间，下一步会扣减库存并更新健康报告。',
-                          'Choose the meal and actual eating time. The next step updates stock and your health report.'
+                          '确认后会从库存里扣掉这道菜用到的食材。',
+                          'Confirming deducts the ingredients this recipe used from your stock.'
                         )}
                       </Text>
                     </View>
-                  </View>
-
-                  <View style={styles.completionLogSection}>
-                    <Text style={styles.completionLogSectionTitle}>{text('记录到', 'Meal')}</Text>
-                    <View style={styles.mealOptions}>
-                      {mealOptions.map((option) => (
-                        <Pressable
-                          key={option.key}
-                          accessibilityRole="radio"
-                          accessibilityLabel={text(option.zh, option.en)}
-                          accessibilityState={{ checked: mealType === option.key }}
-                          onPress={() => setMealType(option.key)}
-                          style={[
-                            styles.mealOption,
-                            mealType === option.key && styles.mealOptionSelected,
-                          ]}>
-                          <Text style={styles.mealOptionEmoji}>{option.emoji}</Text>
-                          <Text
-                            style={[
-                              styles.mealOptionText,
-                              mealType === option.key && styles.mealOptionTextSelected,
-                            ]}>
-                            {text(option.zh, option.en)}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-
-                  <View style={styles.completionLogSection}>
-                    <View style={styles.completionTimeHeader}>
-                      <Text style={styles.completionLogSectionTitle}>{text('吃饭时间', 'Eating time')}</Text>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => setMealTime(currentTime())}
-                        style={styles.nowTimeButton}>
-                        <Text style={styles.nowTimeButtonText}>{text('设为现在', 'Use now')}</Text>
-                      </Pressable>
-                    </View>
-                    <View style={styles.mealTimePresets}>
-                      {mealTimePresets[mealType].map((time) => (
-                        <Pressable
-                          key={`${mealType}-${time}`}
-                          accessibilityRole="radio"
-                          accessibilityLabel={text(`用餐时间 ${time}`, `Eating time ${time}`)}
-                          accessibilityState={{ checked: mealTime === time }}
-                          onPress={() => setMealTime(time)}
-                          style={[
-                            styles.mealTimePreset,
-                            mealTime === time && styles.mealTimePresetSelected,
-                          ]}>
-                          <Text
-                            style={[
-                              styles.mealTimePresetText,
-                              mealTime === time && styles.mealTimePresetTextSelected,
-                            ]}>
-                            {time}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                    <View
-                      style={[
-                        styles.mealTimeInputWrap,
-                        !isValidMealTime(mealTime) && styles.mealTimeInputWrapError,
-                      ]}>
-                      <Text style={styles.mealTimeInputIcon}>🕐</Text>
-                      <TextInput
-                        accessibilityLabel={text('自定义吃饭时间', 'Custom eating time')}
-                        value={mealTime}
-                        onChangeText={setMealTime}
-                        placeholder="HH:MM"
-                        placeholderTextColor={Colors.light.textSecondary}
-                        keyboardType="numbers-and-punctuation"
-                        maxLength={5}
-                        selectTextOnFocus
-                        style={styles.mealTimeInput}
-                      />
-                    </View>
-                    {!isValidMealTime(mealTime) ? (
-                      <Text style={styles.mealTimeError}>
-                        {text('请输入 00:00–23:59 的时间。', 'Enter a time from 00:00 to 23:59.')}
-                      </Text>
-                    ) : null}
                   </View>
 
                   <View style={styles.completionInlineHint}>

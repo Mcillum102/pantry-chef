@@ -52,3 +52,13 @@ body {
   padding-right: max(14px, env(safe-area-inset-right, 0px));
   padding-left: max(14px, env(safe-area-inset-left, 0px));
 }
+
+/* 手指点按后不显示浏览器默认的蓝色焦点框；只有用键盘切换焦点时才显示（无障碍需要） */
+#root :focus:not(:focus-visible) {
+  outline: none;
+}
+
+#root :focus-visible {
+  outline: 2px solid #2e6b4f;
+  outline-offset: 2px;
+}

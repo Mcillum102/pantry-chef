@@ -63,8 +63,9 @@ export function ReminderProvider({ children }: PropsWithChildren) {
     'reminder-preferences-v1',
     defaultReminderPreferences
   );
+  // 健康功能已下线：三餐、饮水提醒始终关闭
   const preferences = useMemo(
-    () => normalizeReminderPreferences(storedPreferences),
+    () => ({ ...normalizeReminderPreferences(storedPreferences), mealsEnabled: false, hydrationEnabled: false }),
     [storedPreferences]
   );
   const uncheckedShoppingCount = shoppingList.filter((item) => !item.checked).length;

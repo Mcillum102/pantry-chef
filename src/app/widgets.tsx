@@ -8,9 +8,8 @@ import { useLanguage } from '@/context/language-context';
 import { type WidgetKind, useWidgets } from '@/context/widget-context';
 import { localizeContent } from '@/data/content-translations';
 
-const widgetMeta: Record<WidgetKind, { emoji: string; zh: string; en: string; detailZh: string; detailEn: string }> = {
+const widgetMeta: Record<Exclude<WidgetKind, 'hydration'>, { emoji: string; zh: string; en: string; detailZh: string; detailEn: string }> = {
   expiry: { emoji: '⏳', zh: '临期库存', en: 'Expiry', detailZh: '显示最近需要处理的物品', detailEn: 'Shows items that need attention soon' },
-  hydration: { emoji: '💧', zh: '今日饮水量', en: 'Hydration', detailZh: '显示饮水量和每日目标', detailEn: 'Shows hydration and your daily goal' },
   timer: { emoji: '🍳', zh: '烹饪倒计时', en: 'Cooking timer', detailZh: '显示当前菜谱、步骤和计时', detailEn: 'Shows the current recipe, step, and timer' },
 };
 
@@ -25,7 +24,6 @@ export default function WidgetCenterScreen() {
   const router = useRouter();
   const { language, locale, text } = useLanguage();
   const { enabledWidgets, setWidgetEnabled, snapshot, nativeWidgetsReady } = useWidgets();
-  const hydrationProgress = Math.min(snapshot.hydration.retainedMl / Math.max(snapshot.hydration.goalMl, 1), 1);
   const timerMinutes = snapshot.timer.deadline
     ? Math.max(0, Math.ceil((snapshot.timer.deadline - Date.now()) / 60_000))
     : null;
@@ -79,18 +77,6 @@ export default function WidgetCenterScreen() {
             ) : null}
           </View>
 
-          <View style={styles.smallWidgetBlue}>
-            <View style={styles.widgetTopRow}>
-              <Text style={styles.widgetBrandBlue}>{text('今日饮水量', 'HYDRATION')}</Text>
-              <Text style={styles.widgetTopEmoji}>💧</Text>
-            </View>
-            <Text style={styles.hydrationValue}>{snapshot.hydration.retainedMl}</Text>
-            <Text style={styles.hydrationUnit}>mL / {snapshot.hydration.goalMl}</Text>
-            <View style={styles.widgetProgressTrack}>
-              <View style={[styles.widgetProgressFill, { width: `${hydrationProgress * 100}%` }]} />
-            </View>
-            <Text style={styles.hydrationCaption}>{text('继续保持，少量多次补水', 'Keep sipping through the day')}</Text>
-          </View>
         </View>
 
         <View style={styles.mediumWidget}>
@@ -118,7 +104,7 @@ export default function WidgetCenterScreen() {
       <View style={styles.settingsSection}>
         <SectionHeader title={text('显示内容', 'Included widgets')} />
         <View style={styles.settingsCard}>
-          {(Object.keys(widgetMeta) as WidgetKind[]).map((kind) => {
+          {(Object.keys(widgetMeta) as (keyof typeof widgetMeta)[]).map((kind) => {
             const meta = widgetMeta[kind];
             const enabled = enabledWidgets.includes(kind);
             return (
