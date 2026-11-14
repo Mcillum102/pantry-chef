@@ -6,8 +6,11 @@ import { createCloudSyncApi } from '@/services/cloud-sync-core';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+// 两台手机共用的厨房账号，app 启动时自动登录，不需要手动输入
+const kitchenEmail = process.env.EXPO_PUBLIC_KITCHEN_EMAIL;
+const kitchenPassword = process.env.EXPO_PUBLIC_KITCHEN_PASSWORD;
 
-export const isCloudConfigured = Boolean(supabaseUrl && supabaseKey);
+export const isCloudConfigured = Boolean(supabaseUrl && supabaseKey && kitchenEmail && kitchenPassword);
 
 export const supabase = isCloudConfigured
   ? createClient(supabaseUrl!, supabaseKey!, {
@@ -15,7 +18,7 @@ export const supabase = isCloudConfigured
         storage: typeof window === 'undefined' ? undefined : window.localStorage,
         autoRefreshToken: true,
         persistSession: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
         flowType: 'pkce',
       },
     })
@@ -24,36 +27,23 @@ export const supabase = isCloudConfigured
 const cloudApi = createCloudSyncApi(supabase);
 
 export const {
-  acceptHouseholdInvite,
-  createCloudHousehold,
-  createHouseholdInvite,
-  deleteCloudAccount,
   ensureCloudHousehold,
-  exchangeCloudAuthCode,
   getCloudSession,
   loadCloudHousehold,
-  leaveCloudHousehold,
   pullHouseholdSnapshot,
   pushHouseholdSnapshot,
-  sendMagicLink,
-  sendPasswordReset,
   signInWithPassword,
-  signInWithOAuthProvider,
-  signOutFromCloud,
-  signUpWithPassword,
   subscribeToCloudAuth,
   subscribeToHouseholdSnapshot,
-  transferHouseholdOwnership,
-  removeHouseholdMember,
-  updateAccountPassword,
-  verifyEmailOtp,
 } = cloudApi;
+
+export function signInToSharedKitchen() {
+  return signInWithPassword(kitchenEmail ?? '', kitchenPassword ?? '');
+}
 
 export type {
   CloudHousehold,
-  CloudInvite,
   CloudMember,
   CloudSnapshotPushResult,
   CloudSnapshotRow,
-  SocialAuthProvider,
 } from '@/services/cloud-sync-core';

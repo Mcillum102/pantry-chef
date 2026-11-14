@@ -1,11 +1,10 @@
 # 鲜食记 / Fresh Pantry
 
-基于 Expo SDK 54、React Native 和 Expo Router 的多端厨房库存应用。iPhone 是主要体验端，同时支持 Android 和 Web 预览。
+基于 Expo SDK 54、React Native 和 Expo Router 的厨房库存应用。**私用版：只给我们两个人用**。不用注册登录，打开后选「我是谁」，两台手机自动共享同一个厨房。
 
 ## 已实现
 
 - SQLite 本地持久化（Web 使用 localStorage 适配器）
-- 首次使用引导、示例/空数据选择，以及按用途解释的权限请求
 - 分类库存、存放位置、独立批次、开封后保质期、单位换算和库存变动历史
 - 最近删除恢复、本地完整 JSON 备份与格式校验恢复
 - “今天”首页汇总临期食材、购物待办、三餐、加餐、饮水量和正在烹饪的步骤
@@ -19,9 +18,8 @@
 - 库存处置原因、7/30 天节约报告与浪费趋势
 - 首页区块隐藏、排序与持久化布局
 - iOS 小组件数据快照、临期/饮水/烹饪预览和显示偏好
-- 中英文切换
-- Supabase 账号注册、密码/验证码登录、密码重置、账号注销、创建或加入家庭、管理员移交、成员移除、版本化同步和冲突处理
-- 过敏/忌口筛选、可解释的下一餐推荐、数据来源说明与健康免责声明
+- 首次打开选择两人中的一个（可随时切换），共享账号后台自动登录，版本化同步和冲突处理
+- 过敏/忌口筛选、可解释的下一餐推荐
 - React 错误边界、本机诊断记录和库存/云同步冲突单元测试
 
 ## 启动
@@ -33,18 +31,21 @@ npx expo start
 
 终端出现二维码后，可使用 iPhone 上的 Expo Go 扫码；按 `w` 可启动 Web 预览。
 
-## 配置 Supabase（可选）
+## 配置 Supabase
 
-1. 复制 `.env.example` 为 `.env`，填写项目 URL 和 publishable key。
-2. 在 Supabase SQL Editor 中运行 `supabase/schema.sql`。
-3. 在 Supabase Authentication 中启用 Email provider；把 `http://localhost:8082/**`、`pantrychef://**` 和开发期的 `exp://**` 加入 Redirect URLs。
-4. 重启 Expo 开发服务器，在“我的 → 创建账号”中注册，然后创建家庭或使用邀请码加入。
+1. Supabase 后台 **Authentication → Sign In / Providers**：关闭 “Allow new users to sign up”，只保留 Email provider。
+2. 新项目先跑 `supabase/schema.sql`；然后打开 `supabase/migrations/20261114000000_private_two_person.sql`，把最底部白名单里的邮箱改成共享账号的邮箱，取消注释，整份执行。已有生产库按 `supabase/README.md` 的流程只执行这个 migration。
+3. **Authentication → Users → Add user**，用同一个邮箱建账号（勾选 Auto Confirm User，密码用一串长随机字符）。不在白名单里的邮箱会被数据库直接拒绝。
+4. 复制 `.env.example` 为 `.env`，填 Supabase URL / key、共享账号邮箱和密码，以及两个人的名字。
+5. 重启 Expo。两台手机打开后各自选「我是谁」，app 会在后台自动登录并进入同一个厨房。
 
-没有配置 Supabase 时，全部本地功能仍然可以正常使用。
+> ⚠️ 共享账号的密码会打包进前端代码（`EXPO_PUBLIC_*` 都是公开的）。拿到网址并会翻 JS 的人理论上能读写厨房数据，所以生产网址别外传。以后想更安全，可以改成每台手机首次输入一次「厨房口令」。
+
+数据库变更流程见 `supabase/README.md`。没有配置 `.env` 时，app 以纯本地模式运行（方便开发调试）。
 
 ## 两人安装到 iPhone 主屏幕
 
-项目包含 PWA manifest、Apple Touch Icon、独立启动模式和 Web 邮箱验证回跳，可以在没有 Apple Developer Program 的情况下先作为家庭 Web App 使用。
+项目包含 PWA manifest、Apple Touch Icon 和独立启动模式，可以在没有 Apple Developer Program 的情况下先作为 Web App 使用。
 
 ```bash
 npm run web:export
@@ -52,9 +53,9 @@ npm run web:serve
 npm run web:deploy
 ```
 
-首次发布需要免费的 Expo 账号。发布完成后，把生产网址的 `https://<name>.expo.app/**` 加入 Supabase Authentication 的 Redirect URLs。两台 iPhone 分别用 Safari 打开生产网址，点“共享 → 添加到主屏幕”；随后分别注册账号，由一人创建家庭并向另一人的邮箱生成邀请码。
+首次发布需要免费的 Expo 账号。两台 iPhone 分别用 Safari 打开生产网址，点“共享 → 添加到主屏幕”，然后各自选「我是谁」。
 
-PWA 会把库存和未同步改动保留在当前设备，并通过 Supabase 同步家庭数据。当前未启用 Service Worker，以避免旧版页面被长期缓存；因此首次打开和加载新版本仍需要联网。
+PWA 会把库存和未同步改动保留在当前设备，并通过 Supabase 同步。当前未启用 Service Worker，以避免旧版页面被长期缓存；因此首次打开和加载新版本仍需要联网。
 
 ## 验证
 
@@ -81,7 +82,8 @@ npm run lint
 - `src/app/planner.tsx`：7 天智能菜单
 - `src/app/insights.tsx`：节约与浪费报告
 - `src/app/widgets.tsx`：iOS 小组件预览与设置
-- `src/app/profile.tsx`：家庭与设置入口
-- `src/app/account.tsx`：账号注册、登录、创建/加入家庭与成员邀请
+- `src/app/profile.tsx`：设置、备份入口
+- `src/app/account.tsx`：同步状态、冲突处理与切换身份
+- `src/constants/members.ts`：两个人的名字和头像
 - `src/context/`：持久化业务状态
 - `src/services/`：SQLite、通知和云同步

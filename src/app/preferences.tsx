@@ -40,7 +40,7 @@ function SettingRow({ emoji, title, detail, value, onValueChange }: SettingRowPr
 
 export default function PreferencesScreen() {
   const router = useRouter();
-  const { language, setLanguage, text } = useLanguage();
+  const { text } = useLanguage();
   const {
     enabled: cloudSync,
     setEnabled: setCloudSync,
@@ -106,7 +106,7 @@ export default function PreferencesScreen() {
     <AppScreen
       eyebrow={text('我的厨房', 'MY KITCHEN')}
       title={text('偏好设置', 'Preferences')}
-      subtitle={text('语言、智能建议、同步和提醒都集中在这里。', 'Manage language, smart suggestions, sync, and reminders in one place.')}
+      subtitle={text('智能建议、同步和提醒都集中在这里。', 'Manage smart suggestions, sync, and reminders in one place.')}
       action={
         <Pressable
           accessibilityRole="button"
@@ -119,31 +119,6 @@ export default function PreferencesScreen() {
       <View style={styles.section}>
         <SectionHeader title={text('通用', 'General')} />
         <View style={styles.settingsCard}>
-          <View style={styles.settingRow}>
-            <View style={styles.settingIcon}><Text style={styles.settingEmoji}>🌐</Text></View>
-            <View style={styles.settingCopy}>
-              <Text style={styles.settingTitle}>{text('语言', 'Language')}</Text>
-              <Text style={styles.settingDetail}>{text('整个 App 会立即切换语言', 'Changes the language throughout the app')}</Text>
-            </View>
-            <View style={styles.languageCard}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={text('切换为中文', 'Switch to Chinese')}
-                accessibilityState={{ selected: language === 'zh' }}
-                onPress={() => setLanguage('zh')}
-                style={[styles.languageOption, language === 'zh' && styles.languageOptionSelected]}>
-                <Text style={[styles.languageText, language === 'zh' && styles.languageTextSelected]}>中文</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={text('切换为英文', 'Switch to English')}
-                accessibilityState={{ selected: language === 'en' }}
-                onPress={() => setLanguage('en')}
-                style={[styles.languageOption, language === 'en' && styles.languageOptionSelected]}>
-                <Text style={[styles.languageText, language === 'en' && styles.languageTextSelected]}>EN</Text>
-              </Pressable>
-            </View>
-          </View>
           <SettingRow
             emoji="✨"
             title={text('自动估算保质期', 'Estimate shelf life')}
@@ -368,11 +343,6 @@ const styles = StyleSheet.create({
   settingCopy: { flex: 1, gap: 3 },
   settingTitle: { color: Colors.light.text, fontSize: 14, fontWeight: '800' },
   settingDetail: { color: Colors.light.textSecondary, fontSize: 10.5, lineHeight: 15 },
-  languageCard: { flexDirection: 'row', width: 108, gap: 3, borderRadius: 14, padding: 3, backgroundColor: Colors.light.backgroundElement },
-  languageOption: { flex: 1, minHeight: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 11 },
-  languageOptionSelected: { backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
-  languageText: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '800' },
-  languageTextSelected: { color: Colors.light.primary, fontWeight: '900' },
   reminderTestRow: { minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border, backgroundColor: '#F7F8F4' },
   reminderTimingCopy: { flex: 1, gap: 3 },
   reminderTimingTitle: { color: Colors.light.text, fontSize: 13, fontWeight: '800' },

@@ -1,5 +1,4 @@
 import type { Session } from '@supabase/supabase-js';
-import * as Linking from 'expo-linking';
 import {
   createContext,
   type PropsWithChildren,
@@ -11,39 +10,23 @@ import {
   useState,
 } from 'react';
 
-import { createEmptyHealthSnapshot, type HealthSnapshot, useHealth } from '@/context/health-context';
-import { createEmptyKitchenSnapshot, type KitchenSnapshot, useKitchen } from '@/context/kitchen-context';
+import { type HealthSnapshot, useHealth } from '@/context/health-context';
+import { type KitchenSnapshot, useKitchen } from '@/context/kitchen-context';
 import { usePersistentState } from '@/hooks/use-persistent-state';
 import { classifyRemoteSnapshot } from '@/data/cloud-sync-utils';
 import { recordDiagnostic } from '@/services/diagnostics';
 import {
-  acceptHouseholdInvite,
-  createCloudHousehold,
-  createHouseholdInvite,
-  deleteCloudAccount,
-  exchangeCloudAuthCode,
+  ensureCloudHousehold,
   getCloudSession,
   isCloudConfigured,
   loadCloudHousehold,
-  leaveCloudHousehold,
   pullHouseholdSnapshot,
   pushHouseholdSnapshot,
-  sendMagicLink,
-  sendPasswordReset,
-  signInWithPassword,
-  signInWithOAuthProvider,
-  signOutFromCloud,
-  signUpWithPassword,
+  signInToSharedKitchen,
   subscribeToCloudAuth,
   subscribeToHouseholdSnapshot,
-  verifyEmailOtp,
-  transferHouseholdOwnership,
-  removeHouseholdMember,
-  updateAccountPassword,
   type CloudHousehold,
-  type CloudInvite,
   type CloudSnapshotRow,
-  type SocialAuthProvider,
 } from '@/services/cloud-sync';
 
 export type AppCloudSnapshot = {
@@ -63,7 +46,6 @@ export type CloudSyncStatus =
   | 'not-configured'
   | 'loading'
   | 'signed-out'
-  | 'needs-household'
   | 'paused'
   | 'syncing'
   | 'synced'
@@ -82,23 +64,8 @@ type CloudSyncContextValue = {
   conflict: CloudConflict | null;
   lastSyncedAt: string | null;
   lastError: string | null;
-  sendSignInLink: (email: string) => Promise<void>;
-  verifyOtp: (email: string, token: string) => Promise<void>;
-  register: (email: string, password: string, displayName: string) => Promise<{ needsEmailVerification: boolean }>;
-  signIn: (email: string, password: string) => Promise<void>;
-  signInWithProvider: (provider: SocialAuthProvider) => Promise<void>;
-  requestPasswordReset: (email: string) => Promise<void>;
-  changePassword: (password: string) => Promise<void>;
-  signOut: () => Promise<void>;
-  createHousehold: (name: string) => Promise<void>;
   syncNow: () => Promise<void>;
   refreshHousehold: () => Promise<void>;
-  inviteMember: (email: string) => Promise<CloudInvite>;
-  acceptInvite: (code: string) => Promise<void>;
-  transferOwnership: (memberId: string) => Promise<void>;
-  removeMember: (memberId: string) => Promise<void>;
-  leaveHousehold: () => Promise<void>;
-  deleteAccount: () => Promise<void>;
   resolveConflict: (choice: 'local' | 'remote') => Promise<void>;
   retryInitialization: () => void;
 };
@@ -114,14 +81,9 @@ function isAppCloudSnapshot(value: unknown): value is AppCloudSnapshot {
 export function CloudSyncProvider({ children }: PropsWithChildren) {
   const kitchen = useKitchen();
   const health = useHealth();
-  const linkingUrl = Linking.useLinkingURL();
-  const [enabled, setEnabled] = usePersistentState('setting-cloud-sync', false);
+  const [enabled, setEnabled] = usePersistentState('setting-cloud-sync', true);
   const [pendingSnapshot, setPendingSnapshot] = usePersistentState<AppCloudSnapshot | null>(
     'cloud-pending-snapshot-v1',
-    null
-  );
-  const [activeHouseholdId, setActiveHouseholdId] = usePersistentState<string | null>(
-    'cloud-active-household-v1',
     null
   );
   const [lastSyncedAt, setLastSyncedAt] = usePersistentState<string | null>(
@@ -191,16 +153,28 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
+  // 没有登录态时，自动用共享厨房账号登录
   useEffect(() => {
-    if (!linkingUrl || !isCloudConfigured) return;
-    const parsed = Linking.parse(linkingUrl);
-    const code = parsed.queryParams?.code;
-    if (typeof code !== 'string' || !code) return;
-    void exchangeCloudAuthCode(code).catch((error) => {
-      setLastError(error instanceof Error ? error.message : String(error));
-      setStatus('error');
-    });
-  }, [linkingUrl]);
+    if (!isCloudConfigured || !authLoaded || session) return;
+    let active = true;
+    setStatus('loading');
+    setLastError(null);
+    void signInToSharedKitchen()
+      .then((nextSession) => {
+        if (!active) return;
+        initializedKeyRef.current = '';
+        setSession(nextSession);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setLastError(error instanceof Error ? error.message : String(error));
+        void recordDiagnostic('cloud-sign-in', error);
+        setStatus('error');
+      });
+    return () => {
+      active = false;
+    };
+  }, [authLoaded, retryNonce, session]);
 
   useEffect(() => {
     if (!kitchen.isHydrated || !health.isHydrated) return;
@@ -260,12 +234,11 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
     }
     if (!session) {
       setHousehold(null);
-      setStatus('signed-out');
       initializedKeyRef.current = '';
       return;
     }
 
-    const initializationKey = `${session.user.id}:${activeHouseholdId ?? 'default'}:${enabled}`;
+    const initializationKey = `${session.user.id}:${enabled}`;
     if (initializedKeyRef.current === initializationKey) return;
     initializedKeyRef.current = initializationKey;
     let active = true;
@@ -274,17 +247,11 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
       setStatus(enabled ? 'syncing' : 'paused');
       setLastError(null);
       try {
-        let nextHousehold = await loadCloudHousehold(activeHouseholdId ?? undefined);
-        if (!nextHousehold && activeHouseholdId) nextHousehold = await loadCloudHousehold();
+        // 白名单成员登录后自动加入共享厨房（第一个人会创建它）
+        const nextHousehold = await ensureCloudHousehold();
         if (!active) return;
-        if (!nextHousehold) {
-          setHousehold(null);
-          setActiveHouseholdId(null);
-          setStatus('needs-household');
-          return;
-        }
+        if (!nextHousehold) throw new Error('household-not-ready');
         setHousehold(nextHousehold);
-        setActiveHouseholdId(nextHousehold.id);
 
         if (!enabled) {
           setStatus('paused');
@@ -324,8 +291,9 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
         }
       } catch (error) {
         if (!active) return;
+        const message = error instanceof Error ? error.message : String(error);
         initializedKeyRef.current = '';
-        setLastError(error instanceof Error ? error.message : String(error));
+        setLastError(message);
         void recordDiagnostic('cloud-initialize', error);
         setStatus(pendingSnapshot ? 'pending' : 'error');
       }
@@ -336,7 +304,6 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
       active = false;
     };
   }, [
-    activeHouseholdId,
     applyRemoteSnapshot,
     authLoaded,
     enabled,
@@ -344,7 +311,6 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
     pendingSnapshot,
     retryNonce,
     session,
-    setActiveHouseholdId,
     setLastSyncedAt,
     setPendingSnapshot,
   ]);
@@ -394,9 +360,9 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
 
   const refreshHousehold = useCallback(async () => {
     if (!session) return;
-    const next = await loadCloudHousehold(activeHouseholdId ?? undefined);
-    setHousehold(next);
-  }, [activeHouseholdId, session]);
+    const next = await loadCloudHousehold(household?.id);
+    if (next) setHousehold(next);
+  }, [household?.id, session]);
 
   const value = useMemo<CloudSyncContextValue>(() => ({
     configured: isCloudConfigured,
@@ -413,116 +379,8 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
     conflict,
     lastSyncedAt,
     lastError,
-    sendSignInLink: async (email) => {
-      setEnabled(true);
-      setStatus('loading');
-      await sendMagicLink(email, Linking.createURL('account'));
-      setStatus('signed-out');
-    },
-    verifyOtp: async (email, token) => {
-      setEnabled(true);
-      setStatus('loading');
-      const nextSession = await verifyEmailOtp(email, token);
-      setSession(nextSession);
-      initializedKeyRef.current = '';
-    },
-    register: async (email, password, displayName) => {
-      setEnabled(true);
-      setStatus('loading');
-      const result = await signUpWithPassword(
-        email,
-        password,
-        displayName,
-        Linking.createURL('account')
-      );
-      setSession(result.session);
-      initializedKeyRef.current = '';
-      setStatus(result.session ? 'needs-household' : 'signed-out');
-      return { needsEmailVerification: result.needsEmailVerification };
-    },
-    signIn: async (email, password) => {
-      setEnabled(true);
-      setStatus('loading');
-      const nextSession = await signInWithPassword(email, password);
-      setSession(nextSession);
-      initializedKeyRef.current = '';
-    },
-    signInWithProvider: async (provider) => {
-      setEnabled(true);
-      setStatus('loading');
-      await signInWithOAuthProvider(provider, Linking.createURL('account'));
-    },
-    requestPasswordReset: async (email) => {
-      await sendPasswordReset(email, Linking.createURL('account'));
-    },
-    changePassword: async (password) => {
-      await updateAccountPassword(password);
-    },
-    signOut: async () => {
-      await signOutFromCloud();
-      setSession(null);
-      setHousehold(null);
-      setActiveHouseholdId(null);
-      setStatus('signed-out');
-    },
-    createHousehold: async (name) => {
-      if (!session) throw new Error('cloud-not-signed-in');
-      setEnabled(true);
-      setStatus('syncing');
-      const created = await createCloudHousehold(name);
-      const emptySnapshot: AppCloudSnapshot = {
-        schemaVersion: 1,
-        updatedAt: new Date().toISOString(),
-        kitchen: createEmptyKitchenSnapshot(),
-        health: createEmptyHealthSnapshot(),
-      };
-      kitchen.replaceSnapshot(emptySnapshot.kitchen);
-      health.replaceSnapshot(emptySnapshot.health);
-      setPendingSnapshot(emptySnapshot);
-      setActiveHouseholdId(created.id);
-      setHousehold(created);
-      initializedKeyRef.current = '';
-    },
     syncNow,
     refreshHousehold,
-    inviteMember: async (email) => {
-      if (!household) throw new Error('household-not-ready');
-      const invite = await createHouseholdInvite(household.id, email);
-      await refreshHousehold();
-      return invite;
-    },
-    acceptInvite: async (code) => {
-      const joined = await acceptHouseholdInvite(code);
-      setActiveHouseholdId(joined.id);
-      setHousehold(joined);
-      initializedKeyRef.current = '';
-      setStatus('syncing');
-    },
-    transferOwnership: async (memberId) => {
-      if (!household) throw new Error('household-not-ready');
-      const updated = await transferHouseholdOwnership(household.id, memberId);
-      setHousehold(updated);
-    },
-    removeMember: async (memberId) => {
-      if (!household) throw new Error('household-not-ready');
-      const updated = await removeHouseholdMember(household.id, memberId);
-      setHousehold(updated);
-    },
-    leaveHousehold: async () => {
-      if (!household) throw new Error('household-not-ready');
-      await leaveCloudHousehold(household.id);
-      setHousehold(null);
-      setActiveHouseholdId(null);
-      initializedKeyRef.current = '';
-      setStatus('needs-household');
-    },
-    deleteAccount: async () => {
-      await deleteCloudAccount();
-      setSession(null);
-      setHousehold(null);
-      setActiveHouseholdId(null);
-      setStatus('signed-out');
-    },
     resolveConflict: async (choice) => {
       if (!conflict || !household) return;
       if (choice === 'remote') {
@@ -550,22 +408,19 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
     retryInitialization: () => {
       initializedKeyRef.current = '';
       setLastError(null);
-      setStatus(session ? (enabled ? 'syncing' : 'paused') : 'signed-out');
+      setStatus(session ? (enabled ? 'syncing' : 'paused') : 'loading');
       setRetryNonce((current) => current + 1);
     },
   }), [
     applyRemoteSnapshot,
     conflict,
     enabled,
-    health,
     household,
-    kitchen,
     lastError,
     lastSyncedAt,
     pendingSnapshot,
     refreshHousehold,
     session,
-    setActiveHouseholdId,
     setEnabled,
     setLastSyncedAt,
     setPendingSnapshot,
