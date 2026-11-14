@@ -104,7 +104,7 @@ export function ShoppingListModal({ visible, onClose, onTransfer }: ShoppingList
               accessibilityRole="button"
               accessibilityLabel={text(`减少${item.name}数量`, `Decrease ${item.name}`)}
               onPress={() => adjustShoppingItemQuantity(item.id, -1)}
-              style={styles.quantityButton}>
+              hitSlop={8} style={styles.quantityButton}>
               <Text style={styles.quantityButtonText}>−</Text>
             </Pressable>
             <Text style={styles.quantityText}>{formatQuantity(item.quantity)}{item.unit}</Text>
@@ -112,7 +112,7 @@ export function ShoppingListModal({ visible, onClose, onTransfer }: ShoppingList
               accessibilityRole="button"
               accessibilityLabel={text(`增加${item.name}数量`, `Increase ${item.name}`)}
               onPress={() => adjustShoppingItemQuantity(item.id, 1)}
-              style={styles.quantityButton}>
+              hitSlop={8} style={styles.quantityButton}>
               <Text style={styles.quantityButtonText}>＋</Text>
             </Pressable>
           </View>
@@ -121,7 +121,7 @@ export function ShoppingListModal({ visible, onClose, onTransfer }: ShoppingList
           accessibilityRole="button"
           accessibilityLabel={text(`删除${item.name}`, `Delete ${item.name}`)}
           onPress={() => deleteShoppingItem(item.id)}
-          style={styles.deleteButton}>
+          hitSlop={8} style={styles.deleteButton}>
           <Text style={styles.deleteButtonText}>×</Text>
         </Pressable>
       </View>
@@ -226,14 +226,14 @@ const styles = StyleSheet.create({
   header: { minHeight: 76, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border, backgroundColor: Colors.light.background },
   headerCopy: { alignItems: 'center', gap: 2 },
   title: { color: Colors.light.text, fontSize: 16, fontWeight: '600' },
-  subtitle: { color: Colors.light.textSecondary, fontSize: 10, fontWeight: '500' },
+  subtitle: { color: Colors.light.textSecondary, fontSize: 11.5, fontWeight: '500' },
   headerPlaceholder: { width: 42, height: 42 },
   closeButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   closeButtonText: { color: Colors.light.text, fontSize: 26, lineHeight: 28 },
   content: { width: '100%', maxWidth: 720, alignSelf: 'center', gap: 16, padding: 18 },
   summaryCard: { minHeight: 94, flexDirection: 'row', alignItems: 'center', gap: 20, paddingHorizontal: 20, borderRadius: 23, backgroundColor: Colors.light.primary },
   summaryValue: { color: '#FFFFFF', fontSize: 25, fontWeight: '600' },
-  summaryLabel: { color: '#D8EADF', fontSize: 9.5, fontWeight: '500' },
+  summaryLabel: { color: '#D8EADF', fontSize: 11, fontWeight: '500' },
   summaryDivider: { width: 1, height: 38, backgroundColor: '#FFFFFF30' },
   summaryEmoji: { marginLeft: 'auto', fontSize: 37 },
   quickAddCard: { gap: 11, padding: 15, borderRadius: 21, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
@@ -246,11 +246,11 @@ const styles = StyleSheet.create({
   unitRow: { gap: 7 },
   unitChip: { minWidth: 45, minHeight: 32, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10, borderRadius: 11, backgroundColor: Colors.light.backgroundElement },
   unitChipActive: { backgroundColor: Colors.light.primarySoft, borderWidth: 1, borderColor: '#A7CFB6' },
-  unitChipText: { color: Colors.light.textSecondary, fontSize: 10.5, fontWeight: '600' },
+  unitChipText: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '600' },
   unitChipTextActive: { color: Colors.light.primary },
   sectionHeader: { minHeight: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 2 },
-  sectionCount: { minWidth: 25, textAlign: 'center', paddingVertical: 4, borderRadius: 9, color: Colors.light.primary, backgroundColor: Colors.light.primarySoft, fontSize: 10, fontWeight: '600' },
-  clearText: { color: Colors.light.danger, fontSize: 10.5, fontWeight: '600' },
+  sectionCount: { minWidth: 25, textAlign: 'center', paddingVertical: 4, borderRadius: 9, color: Colors.light.primary, backgroundColor: Colors.light.primarySoft, fontSize: 11.5, fontWeight: '600' },
+  clearText: { color: Colors.light.danger, fontSize: 12, fontWeight: '600' },
   listCard: { overflow: 'hidden', borderRadius: 20, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   itemRow: { minHeight: 83, flexDirection: 'row', alignItems: 'center', gap: 9, padding: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border },
   itemRowChecked: { backgroundColor: '#F4F7F3' },
@@ -261,17 +261,17 @@ const styles = StyleSheet.create({
   itemCopy: { flex: 1, gap: 3 },
   itemName: { color: Colors.light.text, fontSize: 13, fontWeight: '600' },
   itemNameChecked: { color: Colors.light.textSecondary, textDecorationLine: 'line-through' },
-  itemSource: { color: Colors.light.textSecondary, fontSize: 8.5 },
+  itemSource: { color: Colors.light.textSecondary, fontSize: 10 },
   transferButton: { alignSelf: 'flex-start', minHeight: 25, justifyContent: 'center', marginTop: 2 },
-  transferButtonText: { color: Colors.light.primary, fontSize: 10, fontWeight: '600' },
+  transferButtonText: { color: Colors.light.primary, fontSize: 11.5, fontWeight: '600' },
   quantityControl: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  quantityButton: { width: 27, height: 27, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: Colors.light.backgroundElement },
+  quantityButton: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: Colors.light.backgroundElement },
   quantityButtonText: { color: Colors.light.text, fontSize: 15, fontWeight: '600' },
-  quantityText: { minWidth: 40, color: Colors.light.text, fontSize: 9.5, fontWeight: '600', textAlign: 'center' },
-  deleteButton: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  quantityText: { minWidth: 40, color: Colors.light.text, fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  deleteButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   deleteButtonText: { color: Colors.light.danger, fontSize: 20 },
   emptyState: { alignItems: 'center', gap: 6, padding: 28 },
   emptyEmoji: { fontSize: 34 },
   emptyTitle: { color: Colors.light.text, fontSize: 14, fontWeight: '600' },
-  emptyText: { maxWidth: 260, color: Colors.light.textSecondary, fontSize: 10, lineHeight: 15, textAlign: 'center' },
+  emptyText: { maxWidth: 260, color: Colors.light.textSecondary, fontSize: 11.5, lineHeight: 15, textAlign: 'center' },
 });

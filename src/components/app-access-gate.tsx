@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
   errorMark: { backgroundColor: '#FFF0DA' },
   errorTitle: { color: Colors.light.text, fontSize: 20, fontWeight: '600', textAlign: 'center' },
   errorText: { maxWidth: 320, color: Colors.light.textSecondary, fontSize: 13, lineHeight: 20, textAlign: 'center' },
-  errorCode: { maxWidth: 340, color: Colors.light.textSecondary, fontSize: 10, textAlign: 'center' },
+  errorCode: { maxWidth: 340, color: Colors.light.textSecondary, fontSize: 11.5, textAlign: 'center' },
   retryButton: { minWidth: 150, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: Colors.light.primary },
   retryButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
 });

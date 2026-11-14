@@ -306,7 +306,7 @@ export default function WeeklyPlannerScreen() {
                           accessibilityRole="button"
                           accessibilityLabel={text('替换菜谱', 'Swap recipe')}
                           onPress={() => swapRecipe(entry)}
-                          style={styles.iconButton}>
+                          hitSlop={8} style={styles.iconButton}>
                           <MaterialCommunityIcons name="swap-horizontal" size={18} color={Colors.light.primary} />
                         </Pressable>
                         {match.missing.length > 0 ? (
@@ -314,7 +314,7 @@ export default function WeeklyPlannerScreen() {
                             accessibilityRole="button"
                             accessibilityLabel={text('把这道菜的缺料加入购物清单', 'Add this recipe missing items to shopping')}
                             onPress={() => addRecipeMissingToShopping(recipe)}
-                            style={styles.iconButton}>
+                            hitSlop={8} style={styles.iconButton}>
                             <MaterialCommunityIcons name="cart-plus" size={17} color={Colors.light.warning} />
                           </Pressable>
                         ) : (
@@ -325,7 +325,7 @@ export default function WeeklyPlannerScreen() {
                             onPress={() => setWeeklyMealPlan((current) => current.map((item) =>
                               item.id === entry.id ? { ...item, completed: !item.completed } : item
                             ))}
-                            style={[styles.iconButton, entry.completed && styles.completeButton]}>
+                            hitSlop={8} style={[styles.iconButton, entry.completed && styles.completeButton]}>
                             <MaterialCommunityIcons name="check" size={18} color={entry.completed ? '#FFFFFF' : Colors.light.primary} />
                           </Pressable>
                         )}
@@ -356,43 +356,43 @@ const styles = StyleSheet.create({
   closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   overviewCard: { gap: 15, padding: 19, borderRadius: 26, backgroundColor: Colors.light.primary, boxShadow: '0 16px 36px rgba(47, 109, 80, 0.18)' },
   overviewTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  overviewEyebrow: { color: '#CFE6D6', fontSize: 9, fontWeight: '600', letterSpacing: 0.8 },
+  overviewEyebrow: { color: '#CFE6D6', fontSize: 11, fontWeight: '600', letterSpacing: 0.8 },
   overviewTitle: { marginTop: 4, color: '#FFFFFF', fontSize: 23, fontWeight: '600' },
   overviewEmoji: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#FFFFFF16' },
   overviewEmojiText: { fontSize: 27 },
   overviewStats: { minHeight: 58, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, borderRadius: 17, backgroundColor: '#FFFFFF12' },
   overviewStat: { flex: 1, alignItems: 'center', gap: 2 },
   overviewStatValue: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
-  overviewStatLabel: { color: '#CFE6D6', fontSize: 9, fontWeight: '500' },
+  overviewStatLabel: { color: '#CFE6D6', fontSize: 11, fontWeight: '500' },
   overviewDivider: { width: 1, height: 26, backgroundColor: '#FFFFFF22' },
   overviewActions: { flexDirection: 'row', gap: 9 },
   primaryButton: { flex: 1, minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 15, backgroundColor: '#FFFFFF20' },
   primaryButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
   secondaryButton: { flex: 1, minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 15, backgroundColor: '#FFFFFF' },
   secondaryButtonText: { color: Colors.light.primary, fontSize: 12, fontWeight: '600' },
-  statusText: { color: '#D8EBDE', fontSize: 10.5, lineHeight: 16, textAlign: 'center' },
+  statusText: { color: '#D8EBDE', fontSize: 12, lineHeight: 16, textAlign: 'center' },
   daysList: { gap: 13 },
   dayCard: { overflow: 'hidden', borderRadius: 23, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   dayHeader: { minHeight: 55, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, backgroundColor: '#FBFAF6', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border },
   dayTitleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   dayName: { color: Colors.light.text, fontSize: 16, fontWeight: '600' },
   dayNameToday: { color: Colors.light.primary },
-  dayDate: { color: Colors.light.textSecondary, fontSize: 10.5, fontWeight: '500' },
+  dayDate: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '500' },
   todayBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: Colors.light.primarySoft },
-  todayBadgeText: { color: Colors.light.primary, fontSize: 8, fontWeight: '600', letterSpacing: 0.4 },
+  todayBadgeText: { color: Colors.light.primary, fontSize: 10, fontWeight: '600', letterSpacing: 0.4 },
   mealList: { paddingHorizontal: 12 },
   mealRow: { minHeight: 82, flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border },
   mealRowCompleted: { opacity: 0.52 },
   mealTypeBox: { width: 47, alignItems: 'center', gap: 3 },
   mealTypeEmoji: { fontSize: 18 },
-  mealTypeLabel: { color: Colors.light.textSecondary, fontSize: 8.5, fontWeight: '600' },
+  mealTypeLabel: { color: Colors.light.textSecondary, fontSize: 10, fontWeight: '600' },
   mealRecipe: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 9 },
   mealEmoji: { fontSize: 27 },
   mealCopy: { flex: 1, minWidth: 0, gap: 4 },
   mealName: { color: Colors.light.text, fontSize: 13, fontWeight: '600' },
-  mealMeta: { color: Colors.light.textSecondary, fontSize: 9, fontWeight: '500' },
+  mealMeta: { color: Colors.light.textSecondary, fontSize: 11, fontWeight: '500' },
   mealActions: { flexDirection: 'row', gap: 5 },
-  iconButton: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: Colors.light.backgroundElement },
+  iconButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: Colors.light.backgroundElement },
   completeButton: { backgroundColor: Colors.light.primary },
   emptyCard: { alignItems: 'center', gap: 9, padding: 28, borderRadius: 25, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   emptyEmoji: { fontSize: 43 },

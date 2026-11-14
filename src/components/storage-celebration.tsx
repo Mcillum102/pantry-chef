@@ -405,5 +405,5 @@ const styles = StyleSheet.create({
   checkText: { color: '#FFFFFF', fontSize: 21, fontWeight: '600' },
   successCopy: { flex: 1, gap: 4 },
   successTitle: { color: Colors.light.text, fontSize: 14, fontWeight: '600' },
-  successText: { color: Colors.light.textSecondary, fontSize: 11, fontWeight: '500' },
+  successText: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '500' },
 });

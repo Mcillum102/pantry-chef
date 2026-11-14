@@ -243,5 +243,5 @@ const styles = StyleSheet.create({
   checkText: { color: '#FFFFFF', fontSize: 26, fontWeight: '600' },
   successCopy: { flex: 1, gap: 2 },
   successTitle: { color: '#183E30', fontSize: 14, fontWeight: '600' },
-  successText: { color: '#6D7C73', fontSize: 10.5, lineHeight: 16, fontWeight: '500' },
+  successText: { color: '#6D7C73', fontSize: 12, lineHeight: 16, fontWeight: '500' },
 });

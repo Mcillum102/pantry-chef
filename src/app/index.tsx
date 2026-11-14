@@ -617,7 +617,7 @@ export default function HomeScreen() {
                     accessibilityLabel={text(`上移${meta.zh}`, `Move ${meta.en} up`)}
                     disabled={index === 0}
                     onPress={() => moveSection(section.id, -1)}
-                    style={[styles.customizeArrow, index === 0 && styles.customizeDisabled]}>
+                    hitSlop={8} style={[styles.customizeArrow, index === 0 && styles.customizeDisabled]}>
                     <MaterialCommunityIcons name="chevron-up" size={21} color={Colors.light.textSecondary} />
                   </Pressable>
                   <Pressable
@@ -625,7 +625,7 @@ export default function HomeScreen() {
                     accessibilityLabel={text(`下移${meta.zh}`, `Move ${meta.en} down`)}
                     disabled={index === normalizedHomeSections.length - 1}
                     onPress={() => moveSection(section.id, 1)}
-                    style={[styles.customizeArrow, index === normalizedHomeSections.length - 1 && styles.customizeDisabled]}>
+                    hitSlop={8} style={[styles.customizeArrow, index === normalizedHomeSections.length - 1 && styles.customizeDisabled]}>
                     <MaterialCommunityIcons name="chevron-down" size={21} color={Colors.light.textSecondary} />
                   </Pressable>
                   <Pressable
@@ -659,25 +659,25 @@ const styles = StyleSheet.create({
   savingsFeatureCard: { backgroundColor: '#FFF5E8', borderColor: '#F0DFC7' },
   featureIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', marginBottom: 2, borderRadius: 14, backgroundColor: '#FFFFFFB8' },
   featureEmoji: { fontSize: 23 },
-  featureEyebrow: { color: Colors.light.primary, fontSize: 8, fontWeight: '600', letterSpacing: 0.6 },
+  featureEyebrow: { color: Colors.light.primary, fontSize: 10, fontWeight: '600', letterSpacing: 0.6 },
   featureTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '600' },
-  featureText: { flex: 1, color: Colors.light.textSecondary, fontSize: 10, lineHeight: 15 },
+  featureText: { flex: 1, color: Colors.light.textSecondary, fontSize: 11.5, lineHeight: 15 },
   habitCard: { gap: 14, padding: 17, borderRadius: 24, backgroundColor: '#FFF9F4', borderWidth: 1, borderColor: '#EFDED2' },
   habitHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   habitTitleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 11 },
   habitIcon: { width: 43, height: 43, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#FBEAE3' },
   habitTitleCopy: { flex: 1, gap: 2 },
-  habitEyebrow: { color: '#B95E4B', fontSize: 8.5, fontWeight: '600', letterSpacing: 0.7 },
+  habitEyebrow: { color: '#B95E4B', fontSize: 10, fontWeight: '600', letterSpacing: 0.7 },
   habitTitle: { color: Colors.light.text, fontSize: 15, fontWeight: '600' },
   habitStats: { minHeight: 66, flexDirection: 'row', alignItems: 'center', paddingVertical: 7, borderRadius: 18, backgroundColor: '#FFFFFFB8' },
   habitStat: { flex: 1, alignItems: 'center', gap: 3 },
   habitStatValue: { fontSize: 21, fontWeight: '600' },
-  habitStatLabel: { color: Colors.light.textSecondary, fontSize: 8.5, fontWeight: '600', textAlign: 'center' },
+  habitStatLabel: { color: Colors.light.textSecondary, fontSize: 10, fontWeight: '600', textAlign: 'center' },
   habitDivider: { width: StyleSheet.hairlineWidth, height: 31, backgroundColor: '#E9D8CC' },
   habitInsight: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   habitInsightEmoji: { fontSize: 17 },
-  habitInsightText: { flex: 1, color: Colors.light.textSecondary, fontSize: 10.5, lineHeight: 17 },
-  habitFootnote: { color: Colors.light.warning, fontSize: 9.5, fontWeight: '600' },
+  habitInsightText: { flex: 1, color: Colors.light.textSecondary, fontSize: 12, lineHeight: 17 },
+  habitFootnote: { color: Colors.light.warning, fontSize: 11, fontWeight: '600' },
   customizePage: { flex: 1, paddingTop: 12, backgroundColor: Colors.light.background },
   customizeHeader: { minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border },
   customizeReset: { color: Colors.light.textSecondary, fontSize: 14, fontWeight: '500' },
@@ -688,16 +688,16 @@ const styles = StyleSheet.create({
   customizeIntroIcon: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: '#FFFFFFA8' },
   customizeIntroCopy: { flex: 1, gap: 3 },
   customizeIntroTitle: { color: Colors.light.primary, fontSize: 13, fontWeight: '600' },
-  customizeIntroText: { color: Colors.light.textSecondary, fontSize: 10.5, lineHeight: 16 },
+  customizeIntroText: { color: Colors.light.textSecondary, fontSize: 12, lineHeight: 16 },
   customizeList: { overflow: 'hidden', marginHorizontal: 18, borderRadius: 23, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   customizeRow: { minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border },
   customizeRowIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: Colors.light.backgroundElement },
   customizeRowCopy: { flex: 1, gap: 3 },
   customizeRowTitle: { color: Colors.light.text, fontSize: 12.5, fontWeight: '600' },
   customizeRowTitleHidden: { color: Colors.light.textSecondary },
-  customizeRowStatus: { color: Colors.light.textSecondary, fontSize: 9.5 },
+  customizeRowStatus: { color: Colors.light.textSecondary, fontSize: 11 },
   customizeRowActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  customizeArrow: { width: 31, height: 31, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: Colors.light.backgroundElement },
+  customizeArrow: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: Colors.light.backgroundElement },
   customizeDisabled: { opacity: 0.28 },
   customizeToggle: { width: 47, height: 29, justifyContent: 'center', padding: 3, marginLeft: 3, borderRadius: 15, backgroundColor: Colors.light.backgroundElement },
   customizeToggleOn: { backgroundColor: Colors.light.primary },
@@ -717,7 +717,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#FFFFFF1F',
   },
-  heroBadgeText: { color: '#E6F3EA', fontSize: 11, fontWeight: '500', letterSpacing: 0.6 },
+  heroBadgeText: { color: '#E6F3EA', fontSize: 12, fontWeight: '500', letterSpacing: 0.6 },
   heroEmoji: { fontSize: 29 },
   heroTitle: { maxWidth: '90%', color: '#FFFFFF', fontSize: 28, lineHeight: 36 },
   heroText: { maxWidth: '92%', color: '#DDEEE3', fontSize: 14, lineHeight: 21 },
@@ -734,7 +734,7 @@ const styles = StyleSheet.create({
   },
   heroMiniStat: { flex: 1, alignItems: 'center', gap: 2 },
   heroMiniValue: { color: '#FFFFFF', fontSize: 20, fontWeight: '600' },
-  heroMiniLabel: { color: '#CFE6D7', fontSize: 11, fontWeight: '500' },
+  heroMiniLabel: { color: '#CFE6D7', fontSize: 12, fontWeight: '500' },
   heroDivider: { width: 1, height: 28, backgroundColor: '#FFFFFF24' },
   summarySection: { gap: 12 },
   summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -751,7 +751,7 @@ const styles = StyleSheet.create({
   summaryIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 12, marginBottom: 2 },
   summaryLabel: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '500' },
   summaryValue: { fontSize: 30, lineHeight: 36, fontWeight: '600', letterSpacing: -0.5 },
-  summaryDetail: { color: Colors.light.textSecondary, fontSize: 11.5, fontWeight: '500' },
+  summaryDetail: { color: Colors.light.textSecondary, fontSize: 12.5, fontWeight: '500' },
   progressCard: { gap: 12 },
   progressContent: {
     gap: 10,
@@ -765,11 +765,11 @@ const styles = StyleSheet.create({
   progressTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   progressDot: { width: 9, height: 9, borderRadius: 5 },
   progressLabel: { color: Colors.light.text, fontSize: 12, fontWeight: '600' },
-  progressValue: { color: Colors.light.textSecondary, fontSize: 11, fontWeight: '500' },
+  progressValue: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '500' },
   progressTrack: { height: 8, overflow: 'hidden', marginBottom: 4, borderRadius: 4, backgroundColor: Colors.light.backgroundElement },
   progressFill: { height: '100%', borderRadius: 4 },
   progressLinkRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 2 },
-  progressLink: { color: Colors.light.primary, fontSize: 11, fontWeight: '600' },
+  progressLink: { color: Colors.light.primary, fontSize: 12, fontWeight: '600' },
   recipeSection: { gap: 12 },
   recipeCard: {
     minHeight: 118,
@@ -785,10 +785,10 @@ const styles = StyleSheet.create({
   recipeEmojiBox: { width: 68, height: 68, alignItems: 'center', justifyContent: 'center', borderRadius: 21, backgroundColor: '#FFFFFFB8' },
   recipeEmoji: { fontSize: 36 },
   recipeCopy: { flex: 1, gap: 4 },
-  recipeEyebrow: { color: '#A1682D', fontSize: 8.5, fontWeight: '600', letterSpacing: 0.7 },
+  recipeEyebrow: { color: '#A1682D', fontSize: 10, fontWeight: '600', letterSpacing: 0.7 },
   recipeTitle: { color: Colors.light.text, fontSize: 18, fontWeight: '600' },
   recipeMetaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 5 },
-  recipeMeta: { color: Colors.light.textSecondary, fontSize: 9.5, fontWeight: '500' },
+  recipeMeta: { color: Colors.light.textSecondary, fontSize: 11, fontWeight: '500' },
   recipeMetaDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: '#C7AE8D' },
   recipeChevron: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#FFFFFFA8' },
   expirySection: { gap: 12 },
@@ -799,18 +799,18 @@ const styles = StyleSheet.create({
   expiryEmoji: { fontSize: 24 },
   expiryCopy: { flex: 1, gap: 4 },
   expiryName: { color: Colors.light.text, fontSize: 14, fontWeight: '600' },
-  expiryMeta: { color: Colors.light.textSecondary, fontSize: 10.5, fontWeight: '500' },
+  expiryMeta: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '500' },
   expiryBadge: { maxWidth: 92, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 9, backgroundColor: Colors.light.warningSoft },
   expiryBadgeUrgent: { backgroundColor: Colors.light.dangerSoft },
-  expiryBadgeText: { color: Colors.light.warning, fontSize: 9, fontWeight: '600', textAlign: 'center' },
+  expiryBadgeText: { color: Colors.light.warning, fontSize: 11, fontWeight: '600', textAlign: 'center' },
   expiryBadgeTextUrgent: { color: Colors.light.danger },
   emptyCard: { flexDirection: 'row', alignItems: 'center', gap: 13, padding: 18, borderRadius: 22, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   emptyEmoji: { fontSize: 29 },
   emptyCopy: { flex: 1, gap: 3 },
   emptyTitle: { color: Colors.light.text, fontSize: 14, fontWeight: '600' },
-  emptyText: { color: Colors.light.textSecondary, fontSize: 11 },
+  emptyText: { color: Colors.light.textSecondary, fontSize: 12 },
   quickSection: { gap: 12 },
   quickActions: { flexDirection: 'row', gap: 9 },
   quickAction: { flex: 1, minHeight: 82, alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 7, borderRadius: 19, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
-  quickActionText: { color: Colors.light.text, fontSize: 10.5, fontWeight: '600', textAlign: 'center' },
+  quickActionText: { color: Colors.light.text, fontSize: 12, fontWeight: '600', textAlign: 'center' },
 });

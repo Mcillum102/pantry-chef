@@ -220,5 +220,5 @@ const styles = StyleSheet.create({
   },
   taglineRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   taglineLine: { width: 22, height: 1, backgroundColor: '#7CA78E' },
-  tagline: { color: '#5F776A', fontSize: 11, fontWeight: '500', letterSpacing: 1 },
+  tagline: { color: '#5F776A', fontSize: 12, fontWeight: '500', letterSpacing: 1 },
 });

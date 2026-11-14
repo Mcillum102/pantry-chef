@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
   timerIconDone: { backgroundColor: '#FFFFFF2B' },
   timerEmoji: { fontSize: 24 },
   timerCopy: { flex: 1, gap: 3 },
-  timerEyebrow: { color: '#CDE5D6', fontSize: 9.5, fontWeight: '600' },
+  timerEyebrow: { color: '#CDE5D6', fontSize: 11, fontWeight: '600' },
   timerRecipe: { color: '#FFFFFF', fontSize: 13.5, fontWeight: '600' },
   timerValue: { color: '#FFFFFF', fontSize: 20, fontVariant: ['tabular-nums'], fontWeight: '600' },
   timerValueDone: { fontSize: 13 },

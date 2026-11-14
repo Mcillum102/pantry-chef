@@ -16,6 +16,7 @@ import {
   useContext,
   useEffect,
   useRef,
+  useState,
   type ComponentProps,
   type ReactElement,
 } from 'react';
@@ -30,12 +31,14 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+
 import { FloatingCookingTimer } from '@/components/floating-cooking-timer';
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-const INACTIVE = '#7A8079';
+const INACTIVE = '#646A63';
 
 /** 让选中的按钮自动滚到可见区域 */
 const TabRevealContext = createContext<((frame: LayoutRectangle) => void) | null>(null);
@@ -135,6 +138,14 @@ function CustomTabList({ children, containerStyle, surfaceStyle, nativeID, style
   const viewportWidth = useRef(0);
   const scrollX = useRef(0);
   const pendingFrame = useRef<LayoutRectangle | null>(null);
+  const contentWidth = useRef(0);
+  // 两侧渐隐提示：哪一侧还有没露出来的按钮，就在哪一侧显示
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const updateEdges = useCallback(() => {
+    const left = scrollX.current > 4;
+    const right = scrollX.current + viewportWidth.current < contentWidth.current - 4;
+    setEdges((current) => (current.left === left && current.right === right ? current : { left, right }));
+  }, []);
   const reveal = useCallback((frame: LayoutRectangle) => {
     const width = viewportWidth.current;
     // 刚挂载时按钮比滚动区先完成测量，先记下来，等滚动区有宽度后再滚
@@ -155,6 +166,7 @@ function CustomTabList({ children, containerStyle, surfaceStyle, nativeID, style
         <View style={[styles.innerContainer, surfaceStyle]}>
           <View style={styles.glassHighlight} />
           <TabRevealContext.Provider value={reveal}>
+            <View style={styles.scrollArea}>
             <ScrollView
               ref={scrollRef}
               horizontal
@@ -164,19 +176,47 @@ function CustomTabList({ children, containerStyle, surfaceStyle, nativeID, style
                 const pending = pendingFrame.current;
                 pendingFrame.current = null;
                 if (pending) reveal(pending);
+                updateEdges();
               }}
-              onScroll={(event) => { scrollX.current = event.nativeEvent.contentOffset.x; }}
+              onContentSizeChange={(width) => {
+                contentWidth.current = width;
+                updateEdges();
+              }}
+              onScroll={(event) => {
+                scrollX.current = event.nativeEvent.contentOffset.x;
+                updateEdges();
+              }}
               scrollEventThrottle={32}
-              style={styles.scrollArea}
+              style={styles.scrollView}
               contentContainerStyle={styles.scrollContent}>
               {scrollable}
             </ScrollView>
+            {edges.left ? <EdgeFade side="left" /> : null}
+            {edges.right ? <EdgeFade side="right" /> : null}
+            </View>
           </TabRevealContext.Provider>
           <View style={styles.divider} />
           <View style={styles.pinnedArea}>{pinned}</View>
           {hidden}
         </View>
       </View>
+    </View>
+  );
+}
+
+function EdgeFade({ side }: { side: 'left' | 'right' }) {
+  const id = `tab-fade-${side}`;
+  return (
+    <View pointerEvents="none" style={[styles.edgeFade, side === 'left' ? styles.edgeFadeLeft : styles.edgeFadeRight]}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          <LinearGradient id={id} x1={side === 'left' ? '0' : '1'} y1="0" x2={side === 'left' ? '1' : '0'} y2="0">
+            <Stop offset="0%" stopColor="#FAF9F5" stopOpacity={1} />
+            <Stop offset="100%" stopColor="#FAF9F5" stopOpacity={0} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
+      </Svg>
     </View>
   );
 }
@@ -314,8 +354,21 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.92)',
   },
+  scrollView: {
+    flex: 1,
+  },
+  edgeFade: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 28,
+  },
+  edgeFadeLeft: { left: 0 },
+  edgeFadeRight: { right: 0 },
   scrollArea: {
     flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
     borderRadius: 25,
   },
   scrollContent: {
@@ -364,8 +417,8 @@ const styles = StyleSheet.create({
   tabLabel: {
     zIndex: 1,
     color: INACTIVE,
-    fontSize: 10.5,
-    lineHeight: 13,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '500',
     letterSpacing: 0.1,
   },

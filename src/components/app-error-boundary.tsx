@@ -38,7 +38,7 @@ const styles = StyleSheet.create({
   emoji: { fontSize: 52 },
   title: { color: Colors.light.text, fontSize: 22, fontWeight: '600', textAlign: 'center' },
   subtitle: { color: Colors.light.textSecondary, fontSize: 13, textAlign: 'center' },
-  detail: { maxWidth: 360, color: Colors.light.textSecondary, fontSize: 11, lineHeight: 17, textAlign: 'center' },
+  detail: { maxWidth: 360, color: Colors.light.textSecondary, fontSize: 12, lineHeight: 17, textAlign: 'center' },
   button: { minHeight: 50, alignItems: 'center', justifyContent: 'center', marginTop: 8, paddingHorizontal: 24, borderRadius: 16, backgroundColor: Colors.light.primary },
   buttonText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
 });
