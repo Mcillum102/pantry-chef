@@ -13,6 +13,7 @@ import {
 import { type HealthSnapshot, useHealth } from '@/context/health-context';
 import { type KitchenSnapshot, useKitchen } from '@/context/kitchen-context';
 import { usePersistentState } from '@/hooks/use-persistent-state';
+import { isWrongPasscodeError } from '@/data/app-access-utils';
 import { classifyRemoteSnapshot } from '@/data/cloud-sync-utils';
 import { recordDiagnostic } from '@/services/diagnostics';
 import {
@@ -64,6 +65,10 @@ type CloudSyncContextValue = {
   conflict: CloudConflict | null;
   lastSyncedAt: string | null;
   lastError: string | null;
+  /** 已配置云端，但这台手机还没登录共享账号，需要输入厨房口令 */
+  needsPasscode: boolean;
+  /** 用厨房口令登录共享账号；口令错误时抛出 'wrong-passcode' */
+  unlockKitchen: (passcode: string) => Promise<void>;
   syncNow: () => Promise<void>;
   refreshHousehold: () => Promise<void>;
   resolveConflict: (choice: 'local' | 'remote') => Promise<void>;
@@ -153,28 +158,19 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
-  // 没有登录态时，自动用共享厨房账号登录
-  useEffect(() => {
-    if (!isCloudConfigured || !authLoaded || session) return;
-    let active = true;
-    setStatus('loading');
+  const unlockKitchen = useCallback(async (passcode: string) => {
+    if (!isCloudConfigured) return;
     setLastError(null);
-    void signInToSharedKitchen()
-      .then((nextSession) => {
-        if (!active) return;
-        initializedKeyRef.current = '';
-        setSession(nextSession);
-      })
-      .catch((error) => {
-        if (!active) return;
-        setLastError(error instanceof Error ? error.message : String(error));
-        void recordDiagnostic('cloud-sign-in', error);
-        setStatus('error');
-      });
-    return () => {
-      active = false;
-    };
-  }, [authLoaded, retryNonce, session]);
+    try {
+      const nextSession = await signInToSharedKitchen(passcode);
+      initializedKeyRef.current = '';
+      setSession(nextSession);
+    } catch (error) {
+      void recordDiagnostic('cloud-sign-in', error);
+      if (isWrongPasscodeError(error)) throw new Error('wrong-passcode');
+      throw error;
+    }
+  }, []);
 
   useEffect(() => {
     if (!kitchen.isHydrated || !health.isHydrated) return;
@@ -234,6 +230,7 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
     }
     if (!session) {
       setHousehold(null);
+      setStatus('signed-out');
       initializedKeyRef.current = '';
       return;
     }
@@ -379,6 +376,8 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
     conflict,
     lastSyncedAt,
     lastError,
+    needsPasscode: isCloudConfigured && authLoaded && !session,
+    unlockKitchen,
     syncNow,
     refreshHousehold,
     resolveConflict: async (choice) => {
@@ -413,6 +412,7 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
     },
   }), [
     applyRemoteSnapshot,
+    authLoaded,
     conflict,
     enabled,
     household,
@@ -426,6 +426,7 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
     setPendingSnapshot,
     status,
     syncNow,
+    unlockKitchen,
   ]);
 
   return <CloudSyncContext.Provider value={value}>{children}</CloudSyncContext.Provider>;

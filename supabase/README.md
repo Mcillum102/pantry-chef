@@ -3,7 +3,9 @@
 ## 文件
 - `schema.sql`：历史上的一次性建库脚本（可重复执行）。保留不动，供新环境从零搭建。
 - `migrations/20261101000000_baseline.sql`：`schema.sql` 的基线副本，代表生产库**当前已有**的结构。**不要在生产库重复执行。**
-- `migrations/<timestamp>_<name>.sql`：之后的所有增量变更，只新增对象，不修改或删除旧表数据。
+- `migrations/20261114000000_private_two_person.sql`：两人私用版（白名单、注册拦截、删除邀请等公开版功能）。
+- `migrations/20261114010000_keep_kitchen_on_user_delete.sql`：删账号不再连带删除厨房；收回多余表权限。
+- `migrations/<timestamp>_<name>.sql`：之后的所有增量变更，按时间顺序执行，尽量只新增对象，不删除旧表数据。
 - `rollback/<timestamp>_<name>_down.sql`：每个增量 migration 对应的回滚脚本，只删除该 migration 新增的对象。
 
 ## 上线一个 migration 的步骤

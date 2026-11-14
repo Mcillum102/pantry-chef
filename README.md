@@ -1,6 +1,6 @@
 # 鲜食记 / Fresh Pantry
 
-基于 Expo SDK 54、React Native 和 Expo Router 的厨房库存应用。**私用版：只给我们两个人用**。不用注册登录，打开后选「我是谁」，两台手机自动共享同一个厨房。
+基于 Expo SDK 54、React Native 和 Expo Router 的厨房库存应用。**私用版：只给我们两个人用**。不用注册账号：打开后选「我是谁」，第一次输入一次「厨房口令」，两台手机就共享同一个厨房。
 
 ## 已实现
 
@@ -18,7 +18,7 @@
 - 库存处置原因、7/30 天节约报告与浪费趋势
 - 首页区块隐藏、排序与持久化布局
 - iOS 小组件数据快照、临期/饮水/烹饪预览和显示偏好
-- 首次打开选择两人中的一个（可随时切换），共享账号后台自动登录，版本化同步和冲突处理
+- 首次打开选择两人中的一个（可随时切换），每台手机输入一次厨房口令，版本化同步和冲突处理
 - 过敏/忌口筛选、可解释的下一餐推荐
 - React 错误边界、本机诊断记录和库存/云同步冲突单元测试
 
@@ -34,12 +34,14 @@ npx expo start
 ## 配置 Supabase
 
 1. Supabase 后台 **Authentication → Sign In / Providers**：关闭 “Allow new users to sign up”，只保留 Email provider。
-2. 新项目先跑 `supabase/schema.sql`；然后打开 `supabase/migrations/20261114000000_private_two_person.sql`，把最底部白名单里的邮箱改成共享账号的邮箱，取消注释，整份执行。已有生产库按 `supabase/README.md` 的流程只执行这个 migration。
-3. **Authentication → Users → Add user**，用同一个邮箱建账号（勾选 Auto Confirm User，密码用一串长随机字符）。不在白名单里的邮箱会被数据库直接拒绝。
-4. 复制 `.env.example` 为 `.env`，填 Supabase URL / key、共享账号邮箱和密码，以及两个人的名字。
-5. 重启 Expo。两台手机打开后各自选「我是谁」，app 会在后台自动登录并进入同一个厨房。
+2. 新项目先跑 `supabase/schema.sql`；然后打开 `supabase/migrations/20261114000000_private_two_person.sql`，把最底部白名单里的邮箱改成共享账号的邮箱，取消注释，整份执行；再执行 `20261114010000_keep_kitchen_on_user_delete.sql`。已有生产库按 `supabase/README.md` 的流程只执行这两个 migration。
+3. **Authentication → Users → Add user**，用同一个邮箱建账号（勾选 Auto Confirm User，密码就是「厨房口令」，用一串够长、你们俩记得住的字符）。不在白名单里的邮箱会被数据库直接拒绝。
+4. 复制 `.env.example` 为 `.env`，填 Supabase URL / key、共享账号邮箱，以及两个人的名字。**不要把口令写进 `.env`**。
+5. 重启 Expo。两台手机打开后各自选「我是谁」，输入一次厨房口令，就会进入同一个厨房；之后保持登录，不用再输。
 
-> ⚠️ 共享账号的密码会打包进前端代码（`EXPO_PUBLIC_*` 都是公开的）。拿到网址并会翻 JS 的人理论上能读写厨房数据，所以生产网址别外传。以后想更安全，可以改成每台手机首次输入一次「厨房口令」。
+> 🔐 厨房口令不会打包进前端代码，只在输入时发给 Supabase 换取登录态。忘了或想换口令：在 Supabase **Authentication → Users** 里改共享账号的密码，下次需要重新登录的手机输入新口令即可。
+>
+> ⚠️ 在生产库执行 `20261114010000_keep_kitchen_on_user_delete.sql` 之前，**不要在 Authentication → Users 里删除任何账号**：建厨房的账号被删会连带删除整个厨房。执行之后，删账号不会再影响厨房数据。
 
 数据库变更流程见 `supabase/README.md`。没有配置 `.env` 时，app 以纯本地模式运行（方便开发调试）。
 

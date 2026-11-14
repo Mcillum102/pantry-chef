@@ -2,6 +2,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import AppTabs from '@/components/app-tabs';
 import { CloudSyncStatusPill } from '@/components/cloud-sync-status-pill';
+import { KitchenPasscode } from '@/components/kitchen-passcode';
 import { MemberPicker } from '@/components/member-picker';
 import { Colors } from '@/constants/theme';
 import { useCloudSync } from '@/context/cloud-sync-context';
@@ -10,7 +11,7 @@ import { useMember } from '@/context/member-context';
 import { getKitchenAccessState } from '@/data/app-access-utils';
 
 export function AppAccessGate() {
-  const { configured, status, household, lastError, retryInitialization } = useCloudSync();
+  const { configured, status, household, lastError, needsPasscode, retryInitialization } = useCloudSync();
   const { member, isHydrated: memberHydrated } = useMember();
   const { text } = useLanguage();
 
@@ -19,12 +20,14 @@ export function AppAccessGate() {
   const access = getKitchenAccessState({
     hasMember: Boolean(member),
     configured,
+    needsPasscode,
     hasHousehold: Boolean(household),
     status,
     hasError: Boolean(lastError),
   });
 
   if (access === 'choose-member') return <MemberPicker />;
+  if (access === 'enter-passcode') return <KitchenPasscode />;
 
   if (access === 'loading') {
     return (

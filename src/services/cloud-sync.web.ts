@@ -6,11 +6,11 @@ import { createCloudSyncApi } from '@/services/cloud-sync-core';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-// 两台手机共用的厨房账号，app 启动时自动登录，不需要手动输入
+// 两台手机共用的厨房账号。密码（厨房口令）不打包进代码，每台手机第一次打开时输入一次，
+// 之后靠 Supabase 保存在本机的登录态，不再需要输入。
 const kitchenEmail = process.env.EXPO_PUBLIC_KITCHEN_EMAIL;
-const kitchenPassword = process.env.EXPO_PUBLIC_KITCHEN_PASSWORD;
 
-export const isCloudConfigured = Boolean(supabaseUrl && supabaseKey && kitchenEmail && kitchenPassword);
+export const isCloudConfigured = Boolean(supabaseUrl && supabaseKey && kitchenEmail);
 
 export const supabase = isCloudConfigured
   ? createClient(supabaseUrl!, supabaseKey!, {
@@ -37,8 +37,8 @@ export const {
   subscribeToHouseholdSnapshot,
 } = cloudApi;
 
-export function signInToSharedKitchen() {
-  return signInWithPassword(kitchenEmail ?? '', kitchenPassword ?? '');
+export function signInToSharedKitchen(passcode: string) {
+  return signInWithPassword(kitchenEmail ?? '', passcode);
 }
 
 export type {
