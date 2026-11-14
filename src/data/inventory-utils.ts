@@ -92,3 +92,28 @@ export function availableIngredientAmount(
     return stock.dimension === neededUnit.dimension ? total + stock.amount : total;
   }, 0);
 }
+
+export type MissingIngredient = { name: string; quantity: number; unit: string };
+
+/** 做这道菜还差哪些食材、各差多少（按菜谱单位，库存够的不列出） */
+export function missingIngredientsForRecipe(
+  inventory: InventoryItem[],
+  ingredients: RecipeIngredient[],
+  multiplier = 1
+): MissingIngredient[] {
+  return ingredients.flatMap((ingredient) => {
+    const amount = ingredient.amount * multiplier;
+    const neededBase = amountInBaseUnit(amount, ingredient.unit).amount;
+    const availableBase = availableIngredientAmount(inventory, ingredient);
+    if (availableBase >= neededBase) return [];
+    const quantity = amountFromBaseUnit(neededBase - availableBase, ingredient.unit);
+    return [{ name: ingredient.name, quantity: Math.round(quantity * 100) / 100, unit: ingredient.unit }];
+  });
+}
+
+/** 匹配度分档：用于菜谱卡片的进度条颜色和「推荐」角标 */
+export function matchTone(percentage: number): 'high' | 'mid' | 'low' {
+  if (percentage >= 70) return 'high';
+  if (percentage >= 40) return 'mid';
+  return 'low';
+}

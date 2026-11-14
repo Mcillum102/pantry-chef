@@ -56,6 +56,7 @@ import {
   buildQuickInventorySuggestions,
   type QuickInventorySuggestion,
 } from '@/data/inventory-suggestions';
+import { availableStarterItems, buildStarterInventoryItem, type StarterItem } from '@/data/starter-items';
 import { getShelfLifeSuggestion } from '@/data/shelf-life-data';
 import type { SmartInventoryItem } from '@/data/ai-import';
 import { analyzeInventoryText, analyzeReceiptImage } from '@/services/ai-import';
@@ -336,6 +337,8 @@ export default function InventoryScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const {
     inventory,
+    recipes,
+    getRecipeMatch,
     transactions,
     libraries,
     storageLocations,
@@ -395,24 +398,53 @@ export default function InventoryScreen() {
   const [isDetailEditing, setIsDetailEditing] = useState(false);
   const [disposalItem, setDisposalItem] = useState<InventoryItem | null>(null);
   // 列表里的「−1 / 用完」：操作后显示 4 秒撤销提示，防止误触
-  const [undoAction, setUndoAction] = useState<{ itemId: string; delta: number; label: string } | null>(null);
+  // 底部轻提示：带一个操作按钮（撤销 / 去看看），4 秒后自动消失
+  const [toast, setToast] = useState<{ id: number; label: string; actionLabel: string; onAction: () => void } | null>(null);
   useEffect(() => {
-    if (!undoAction) return;
-    const timer = setTimeout(() => setUndoAction(null), 4000);
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(timer);
-  }, [undoAction]);
+  }, [toast]);
+  const showToast = useCallback((label: string, actionLabel: string, onAction: () => void) => {
+    setToast({ id: Date.now(), label, actionLabel, onAction });
+  }, []);
+
+  // 快速添加常用食材：添加后提示能做几道菜
+  const [justAddedName, setJustAddedName] = useState<string | null>(null);
+  const starterItems = useMemo(
+    () => availableStarterItems(inventory.filter((item) => item.quantity > 0).map((item) => item.name)),
+    [inventory]
+  );
+  function quickAddStarter(item: StarterItem) {
+    addInventoryItem(buildStarterInventoryItem(item));
+    setJustAddedName(item.name);
+  }
+  useEffect(() => {
+    if (!justAddedName) return;
+    const matched = recipes.filter((recipe) => getRecipeMatch(recipe).percentage >= 70).length;
+    showToast(
+      matched > 0
+        ? text(`已添加${justAddedName} · 匹配到 ${matched} 道菜`, `Added ${justAddedName} · ${matched} recipes match`)
+        : text(`已添加${justAddedName}`, `Added ${justAddedName}`),
+      matched > 0 ? text('去看看', 'View') : text('好的', 'OK'),
+      () => {
+        if (matched > 0) router.push('/recipes');
+      }
+    );
+    setJustAddedName(null);
+  }, [getRecipeMatch, inventory, justAddedName, recipes, router, showToast, text]);
   function quickAdjust(item: InventoryItem, delta: number) {
     if (!delta) return;
     adjustInventoryQuantity(item.id, delta);
     const name = localizeContent(item.name, language);
     const finished = item.quantity + delta <= 0;
-    setUndoAction({
-      itemId: item.id,
-      delta,
-      label: finished
+    showToast(
+      finished
         ? text(`「${name}」已用完`, `${name} finished`)
         : text(`「${name}」减少了 ${formatQuantity(-delta)} ${item.unit}`, `Used ${formatQuantity(-delta)} ${item.unit} of ${name}`),
-    });
+      text('撤销', 'Undo'),
+      () => adjustInventoryQuantity(item.id, -delta)
+    );
   }
   const [storageCelebration, setStorageCelebration] = useState<StorageCelebrationData | null>(null);
   const pendingStorageCelebrationRef = useRef<StorageCelebrationData | null>(null);
@@ -1312,6 +1344,33 @@ export default function InventoryScreen() {
           </View>
         ) : null}
 
+        {!hasInventoryFilter && activeItems.length < 8 && starterItems.length > 0 ? (
+          <View style={styles.starterCard}>
+            <View style={styles.starterHeader}>
+              <Text style={styles.starterTitle}>
+                {activeItems.length === 0 ? text('先从常用食材开始', 'Start with the basics') : text('快速添加常用食材', 'Quick add staples')}
+              </Text>
+              <Text style={styles.starterText}>
+                {text('家里有什么就先加什么，我来帮你找能做的菜。点一下就加入，数量和日期之后可以改。', 'Add what you have and I will find recipes. Tap to add; edit amounts later.')}
+              </Text>
+            </View>
+            <View style={styles.starterChips}>
+              {starterItems.map((item) => (
+                <Pressable
+                  key={item.name}
+                  accessibilityRole="button"
+                  accessibilityLabel={text(`快速添加${item.name}`, `Quick add ${item.name}`)}
+                  onPress={() => quickAddStarter(item)}
+                  style={({ pressed }) => [styles.starterChip, pressed && styles.starterChipPressed]}>
+                  <Text style={styles.starterChipEmoji}>{item.emoji}</Text>
+                  <Text style={styles.starterChipText}>{item.name}</Text>
+                  <Text style={styles.starterChipPlus}>＋</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.section}>
           <View style={styles.listToolbar}>
             <Text style={styles.listToolbarLabel}>{text('排序', 'Sort')}</Text>
@@ -1392,7 +1451,9 @@ export default function InventoryScreen() {
               <Text style={styles.emptySearchTitle}>
                 {hasSearchQuery
                   ? text(`没有找到“${searchQuery.trim()}”`, `No results for “${searchQuery.trim()}”`)
-                  : text(
+                  : !hasStorageFilter
+                    ? text('库存还是空的', 'Nothing here yet')
+                    : text(
                       `${selectedStorageFilter}暂无库存`,
                       `No items in ${localizeContent(selectedStorageFilter, language).toLocaleLowerCase()}`
                     )}
@@ -1400,7 +1461,9 @@ export default function InventoryScreen() {
               <Text style={styles.emptySearchText}>
                 {hasSearchQuery
                   ? text('试试物品名称、分类、存放位置或做菜建议', 'Try an item, category, location, or cooking suggestion')
-                  : text('这个位置目前还没有记录任何物品', 'No items have been recorded in this location yet')}
+                  : !hasStorageFilter
+                    ? text('点上面的常用食材，或右上角「＋」扫码、拍小票添加。', 'Tap a staple above, or use ＋ to scan or snap a receipt.')
+                    : text('这个位置目前还没有记录任何物品', 'No items have been recorded in this location yet')}
               </Text>
               {hasSearchQuery && selectedLibrary !== '全部' ? (
                 <Pressable
@@ -3063,18 +3126,18 @@ export default function InventoryScreen() {
           onComplete={closeStorageCelebration}
         />
       ) : null}
-      {undoAction ? (
-        <View pointerEvents="box-none" style={[styles.undoToast, { bottom: Math.max(insets.bottom, 8) + 92 }]}>
-          <Text style={styles.undoToastText} numberOfLines={1}>{undoAction.label}</Text>
+      {toast ? (
+        <View key={toast.id} pointerEvents="box-none" style={[styles.undoToast, { bottom: Math.max(insets.bottom, 8) + 92 }]}>
+          <Text style={styles.undoToastText} numberOfLines={1}>{toast.label}</Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={text('撤销', 'Undo')}
+            accessibilityLabel={toast.actionLabel}
             onPress={() => {
-              adjustInventoryQuantity(undoAction.itemId, -undoAction.delta);
-              setUndoAction(null);
+              toast.onAction();
+              setToast(null);
             }}
             style={({ pressed }) => [styles.undoToastButton, pressed && styles.pressed]}>
-            <Text style={styles.undoToastButtonText}>{text('撤销', 'Undo')}</Text>
+            <Text style={styles.undoToastButtonText}>{toast.actionLabel}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -3372,6 +3435,16 @@ const styles = StyleSheet.create({
   quantityColumn: { alignItems: 'flex-end', gap: 3 },
   detailHint: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '500' },
   rowWrap: { position: 'relative' },
+  starterCard: { gap: 14, padding: 18, borderRadius: 24, backgroundColor: 'rgba(255, 255, 255, 0.88)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.95)', boxShadow: '0 1px 2px rgba(30, 36, 32, 0.04), 0 8px 24px rgba(30, 36, 32, 0.06)' },
+  starterHeader: { gap: 4 },
+  starterTitle: { color: Colors.light.text, fontSize: 18, fontWeight: '600' },
+  starterText: { color: Colors.light.textSecondary, fontSize: 13, lineHeight: 19 },
+  starterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  starterChip: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 12, paddingRight: 14, borderRadius: 22, backgroundColor: Colors.light.primarySoft },
+  starterChipPressed: { opacity: 0.7, transform: [{ scale: 0.96 }] },
+  starterChipEmoji: { fontSize: 18 },
+  starterChipText: { color: Colors.light.text, fontSize: 14, fontWeight: '500' },
+  starterChipPlus: { color: Colors.light.primary, fontSize: 15, fontWeight: '600' },
   rowQuickSpacer: { width: 108, height: 36 },
   rowQuickActions: { position: 'absolute', right: 14, bottom: 12, flexDirection: 'row', gap: 6 },
   rowQuickButton: { minWidth: 44, height: 32, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: Colors.light.backgroundElement },

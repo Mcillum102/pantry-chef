@@ -48,6 +48,9 @@ import {
   amountInBaseUnit,
   availableIngredientAmount,
   canonicalIngredientId,
+  matchTone,
+  missingIngredientsForRecipe,
+  type MissingIngredient,
 } from '@/data/inventory-utils';
 
 const recipeLibraries = [
@@ -109,6 +112,9 @@ function formatStepDuration(seconds: number, language: 'zh' | 'en') {
     ? `${minutes}分${remainder}秒`
     : `${minutes}m ${remainder}s`;
 }
+/** 匹配度颜色：高（≥70%）绿、中（≥40%）黄、低灰 */
+const MATCH_COLORS = { high: '#2E6B4F', mid: '#C98A1E', low: '#9AA096' } as const;
+
 const mealOptions: { key: MealType; zh: string; en: string; emoji: string }[] = [
   { key: 'breakfast', zh: '早餐', en: 'Breakfast', emoji: '☀️' },
   { key: 'lunch', zh: '午餐', en: 'Lunch', emoji: '🍱' },
@@ -646,6 +652,22 @@ export default function RecipesScreen() {
     setMajorLibrary(next);
     setCategory('全部');
     setShowAllRecipes(next === 'baking');
+  }
+
+  function addMissingToShoppingList(recipe: Recipe, items: MissingIngredient[]) {
+    items.forEach((item) => addShoppingItem({
+      name: item.name,
+      nameEn: localizeContent(item.name, 'en'),
+      emoji: '🛒',
+      quantity: item.quantity,
+      unit: item.unit,
+      sourceRecipeId: recipe.id,
+      sourceRecipeName: recipe.name,
+    }));
+    setCompletionMessage(text(
+      `已把「${recipe.name}」缺的 ${items.length} 样食材加入购物清单。`,
+      `Added ${items.length} missing items for ${localizeContent(recipe.name, 'en')} to the shopping list.`
+    ));
   }
 
   function openRecipeForm() {
@@ -1253,46 +1275,78 @@ export default function RecipesScreen() {
             {displayedRecipes.map((recipe) => {
               const match = getRecipeMatch(recipe);
               const complete = match.percentage === 100;
+              const tone = matchTone(match.percentage);
+              const missingItems = complete ? [] : missingIngredientsForRecipe(inventory, recipe.ingredients);
+              const unlisted = missingItems.filter((item) => !shoppingList.some(
+                (entry) => !entry.checked && entry.ingredientId === canonicalIngredientId(item.name)
+              ));
               return (
-                <Pressable
-                  key={recipe.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={text(`查看${recipe.name}菜谱`, `View ${localizeContent(recipe.name, 'en')} recipe`)}
-                  onPress={() => openRecipe(recipe)}
-                  style={({ pressed }) => [styles.recipeCard, pressed && styles.cardPressed]}>
-                  <View style={styles.recipeVisual}>
-                    <Text style={styles.recipeEmoji}>{recipe.emoji}</Text>
-                    <View style={[styles.matchBadge, complete && styles.matchBadgeComplete]}>
-                      <Text style={[styles.matchText, complete && styles.matchTextComplete]}>
-                        {match.percentage}% {text('匹配', 'match')}
+                <View key={recipe.id} style={styles.recipeCardShell}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={text(`查看${recipe.name}菜谱`, `View ${localizeContent(recipe.name, 'en')} recipe`)}
+                    onPress={() => openRecipe(recipe)}
+                    style={({ pressed }) => [styles.recipeCard, pressed && styles.cardPressed]}>
+                    <View style={[styles.recipeVisual, tone !== 'high' && styles.recipeVisualMuted]}>
+                      {tone === 'high' ? (
+                        <View style={styles.recommendTag}>
+                          <Text style={styles.recommendTagText}>{complete ? text('能做', 'Ready') : text('推荐', 'Pick')}</Text>
+                        </View>
+                      ) : null}
+                      <Text style={styles.recipeEmoji}>{recipe.emoji}</Text>
+                      <View style={styles.matchMeter}>
+                        <Text style={[styles.matchMeterLabel, { color: MATCH_COLORS[tone] }]}>
+                          {match.percentage}% {text('匹配', 'match')}
+                        </Text>
+                        <View style={styles.matchTrack}>
+                          <View style={[styles.matchFill, { width: `${Math.max(match.percentage, 4)}%` as `${number}%`, backgroundColor: MATCH_COLORS[tone] }]} />
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.recipeBody}>
+                      <View style={styles.recipeTitleRow}>
+                        <Text style={styles.recipeName}>{localizeContent(recipe.name, language)}</Text>
+                        <Text style={styles.chevron}>›</Text>
+                      </View>
+                      <Text style={styles.recipeDescription} numberOfLines={2}>
+                        {localizeContent(recipe.description, language)}
                       </Text>
+                      <View style={styles.recipeMeta}>
+                        <Text style={styles.metaText}>⏱ {recipe.timeMinutes} {text('分钟', 'min')}</Text>
+                        <Text style={styles.metaDot}>·</Text>
+                        <Text style={styles.metaText}>{localizeContent(recipe.difficulty, language)}</Text>
+                        <Text style={styles.metaDot}>·</Text>
+                        <Text style={styles.metaText}>{text(`${recipe.servings}人份`, `${recipe.servings} servings`)}</Text>
+                      </View>
                     </View>
-                  </View>
-                  <View style={styles.recipeBody}>
-                    <View style={styles.recipeTitleRow}>
-                      <Text style={styles.recipeName}>{localizeContent(recipe.name, language)}</Text>
-                      <Text style={styles.chevron}>›</Text>
-                    </View>
-                    <Text style={styles.recipeDescription} numberOfLines={2}>
-                      {localizeContent(recipe.description, language)}
-                    </Text>
-                    <View style={styles.recipeMeta}>
-                      <Text style={styles.metaText}>⏱ {recipe.timeMinutes} {text('分钟', 'min')}</Text>
-                      <Text style={styles.metaDot}>·</Text>
-                      <Text style={styles.metaText}>{localizeContent(recipe.difficulty, language)}</Text>
-                      <Text style={styles.metaDot}>·</Text>
-                      <Text style={styles.metaText}>{text(`${recipe.servings}人份`, `${recipe.servings} servings`)}</Text>
-                    </View>
-                    {match.missing.length > 0 ? (
-                      <Text style={styles.missing}>
+                  </Pressable>
+                  {/* 底部状态栏放在卡片可点区域之外，里面的按钮不会和整张卡片的点击冲突 */}
+                  <View style={styles.recipeFooter}>
+                    {complete ? (
+                      <Text style={styles.ready}>✓ {text('现在就能做', 'Ready to make')}</Text>
+                    ) : (
+                      <Text style={styles.missing} numberOfLines={1}>
                         {text('缺少：', 'Missing: ')}
                         {match.missing.map((item) => localizeContent(item, language)).join(text('、', ', '))}
                       </Text>
-                    ) : (
-                      <Text style={styles.ready}>✓ {text('现在就能做', 'Ready to make')}</Text>
                     )}
+                    {missingItems.length > 0 ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={unlisted.length > 0
+                          ? text(`把${recipe.name}缺的${unlisted.length}样加入购物清单`, `Add ${unlisted.length} missing items to shopping list`)
+                          : text('缺的食材已在购物清单', 'Missing items already on the list')}
+                        disabled={unlisted.length === 0}
+                        hitSlop={6}
+                        onPress={() => addMissingToShoppingList(recipe, unlisted)}
+                        style={({ pressed }) => [styles.addMissingButton, unlisted.length === 0 && styles.addMissingButtonDone, pressed && styles.cardPressed]}>
+                        <Text style={[styles.addMissingText, unlisted.length === 0 && styles.addMissingTextDone]}>
+                          {unlisted.length > 0 ? text(`缺的加入清单 · ${unlisted.length}`, `Add ${unlisted.length} to list`) : text('已在清单', 'On list')}
+                        </Text>
+                      </Pressable>
+                    ) : null}
                   </View>
-                </Pressable>
+                </View>
               );
             })}
           </View>
@@ -2596,14 +2650,23 @@ const styles = StyleSheet.create({
   recipeViewToggleText: { color: Colors.light.primary, fontSize: 12, fontWeight: '600' },
   recipeViewToggleArrow: { color: Colors.light.primary, fontSize: 20, fontWeight: '500' },
   recipeList: { gap: 12 },
-  recipeCard: { flexDirection: 'row', overflow: 'hidden', minHeight: 178, borderRadius: 22, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
+  recipeCardShell: { overflow: 'hidden', borderRadius: 24, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border, boxShadow: '0 1px 2px rgba(30, 36, 32, 0.04), 0 8px 24px rgba(30, 36, 32, 0.05)' },
+  recipeCard: { flexDirection: 'row', minHeight: 150 },
+  recipeVisualMuted: { backgroundColor: Colors.light.backgroundElement },
+  recommendTag: { position: 'absolute', top: 10, left: 10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: Colors.light.primary },
+  recommendTagText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
+  matchMeter: { width: 76, gap: 5, alignItems: 'center' },
+  matchMeterLabel: { fontSize: 12, fontWeight: '600' },
+  matchTrack: { width: '100%', height: 6, overflow: 'hidden', borderRadius: 3, backgroundColor: 'rgba(30, 36, 32, 0.08)' },
+  matchFill: { height: '100%', borderRadius: 3 },
+  recipeFooter: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.light.border },
+  addMissingButton: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 18, backgroundColor: Colors.light.primarySoft },
+  addMissingButtonDone: { backgroundColor: Colors.light.backgroundElement },
+  addMissingText: { color: Colors.light.primary, fontSize: 13, fontWeight: '600' },
+  addMissingTextDone: { color: Colors.light.textSecondary },
   cardPressed: { opacity: 0.78, transform: [{ scale: 0.99 }] },
   recipeVisual: { width: 106, alignItems: 'center', justifyContent: 'center', gap: 17, backgroundColor: Colors.light.primarySoft },
   recipeEmoji: { fontSize: 43 },
-  matchBadge: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 9, backgroundColor: Colors.light.warningSoft },
-  matchBadgeComplete: { backgroundColor: Colors.light.surface },
-  matchText: { color: Colors.light.warning, fontSize: 11.5, fontWeight: '600' },
-  matchTextComplete: { color: Colors.light.primary },
   recipeBody: { flex: 1, padding: 16, gap: 7, justifyContent: 'center' },
   recipeTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   recipeName: { color: Colors.light.text, fontSize: 18, fontWeight: '600' },
@@ -2615,8 +2678,8 @@ const styles = StyleSheet.create({
   recipeMeta: { flexDirection: 'row', alignItems: 'center' },
   metaText: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '500' },
   metaDot: { color: Colors.light.border, marginHorizontal: 5 },
-  ready: { color: Colors.light.primary, fontSize: 12, fontWeight: '600', marginTop: 3 },
-  missing: { color: Colors.light.danger, fontSize: 12, fontWeight: '500', marginTop: 3 },
+  ready: { flex: 1, color: Colors.light.primary, fontSize: 13, fontWeight: '600' },
+  missing: { flex: 1, color: Colors.light.danger, fontSize: 13, fontWeight: '500' },
   emptyState: { alignItems: 'center', paddingVertical: 45, gap: 7 },
   emptyEmoji: { fontSize: 42 },
   emptyTitle: { color: Colors.light.text, fontSize: 16, fontWeight: '600' },
