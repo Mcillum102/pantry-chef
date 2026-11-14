@@ -1,0 +1,327 @@
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import type { Href } from 'expo-router';
+import {
+  TabList,
+  TabSlot,
+  TabTrigger,
+  Tabs,
+  type TabListProps,
+  type TabTriggerSlotProps,
+} from 'expo-router/ui';
+import { Children, isValidElement, useEffect, type ComponentProps, type ReactElement } from 'react';
+import { Pressable, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import Animated, {
+  interpolate,
+  interpolateColor,
+  ReduceMotion,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+
+import { FloatingCookingTimer } from '@/components/floating-cooking-timer';
+import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+
+type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
+
+export type AppTabConfig = {
+  name: string;
+  href: Href;
+  label: string;
+  icon: IconName;
+  selectedIcon: IconName;
+};
+
+/** 底部 Tab 栏里可以左右滑动的入口，按顺序显示。新增入口加在这里。 */
+export const SCROLLABLE_TABS: readonly AppTabConfig[] = [
+  { name: 'home', href: '/', label: '首页', icon: 'home-outline', selectedIcon: 'home' },
+  { name: 'inventory', href: '/inventory', label: '库存', icon: 'fridge-outline', selectedIcon: 'fridge' },
+  { name: 'recipes', href: '/recipes', label: '菜谱', icon: 'book-open-outline', selectedIcon: 'book-open-variant' },
+  { name: 'recommend', href: '/recommend', label: '健康', icon: 'heart-pulse', selectedIcon: 'heart-pulse' },
+  { name: 'games', href: '/games' as Href, label: '游戏', icon: 'gamepad-variant-outline', selectedIcon: 'gamepad-variant' },
+];
+
+/** 固定在 Tab 栏最右边、不跟着滑动的入口 */
+export const PINNED_TAB: AppTabConfig = {
+  name: 'profile',
+  href: '/profile',
+  label: '我的',
+  icon: 'account-outline',
+  selectedIcon: 'account',
+};
+
+/** 不显示在 Tab 栏、但需要保留路由的页面 */
+const HIDDEN_TABS: readonly { name: string; href: Href }[] = [
+  { name: 'planner', href: '/planner' },
+  { name: 'insights', href: '/insights' },
+  { name: 'widgets', href: '/widgets' },
+  { name: 'account', href: '/account' },
+  { name: 'preferences', href: '/preferences' as Href },
+];
+
+type AppTabsLayoutProps = {
+  /** 平台相关的定位（安全区等） */
+  containerStyle?: StyleProp<ViewStyle>;
+  /** 平台相关的玻璃效果 / 背景 */
+  surfaceStyle?: StyleProp<ViewStyle>;
+  nativeID?: string;
+};
+
+export function AppTabsLayout({ containerStyle, surfaceStyle, nativeID }: AppTabsLayoutProps) {
+  return (
+    <Tabs>
+      <TabSlot style={{ height: '100%' }} />
+      <TabList asChild>
+        <CustomTabList containerStyle={containerStyle} surfaceStyle={surfaceStyle} nativeID={nativeID}>
+          {SCROLLABLE_TABS.map((tab) => (
+            <TabTrigger key={tab.name} name={tab.name} href={tab.href} asChild>
+              <TabButton label={tab.label} icon={tab.icon} selectedIcon={tab.selectedIcon} />
+            </TabTrigger>
+          ))}
+          <TabTrigger name={PINNED_TAB.name} href={PINNED_TAB.href} asChild>
+            <TabButton label={PINNED_TAB.label} icon={PINNED_TAB.icon} selectedIcon={PINNED_TAB.selectedIcon} />
+          </TabTrigger>
+          {HIDDEN_TABS.map((tab) => (
+            <TabTrigger key={tab.name} name={tab.name} href={tab.href} style={styles.hiddenTab} />
+          ))}
+        </CustomTabList>
+      </TabList>
+      <FloatingCookingTimer />
+    </Tabs>
+  );
+}
+
+type CustomTabListProps = TabListProps & {
+  containerStyle?: StyleProp<ViewStyle>;
+  surfaceStyle?: StyleProp<ViewStyle>;
+};
+
+const hiddenTabNames = new Set(HIDDEN_TABS.map((tab) => tab.name));
+
+/**
+ * Tab 触发器必须是 TabList 子组件的直接子元素（expo-router 靠这个注册路由），
+ * 所以这里按 name 把它们分到「可滑动区」「固定在右边」「隐藏」三处渲染。
+ */
+function CustomTabList({ children, containerStyle, surfaceStyle, nativeID, style: _style, ...props }: CustomTabListProps) {
+  const scrollable: ReactElement[] = [];
+  const pinned: ReactElement[] = [];
+  const hidden: ReactElement[] = [];
+
+  Children.forEach(children, (child) => {
+    if (!isValidElement<{ name?: string }>(child)) return;
+    const name = child.props.name ?? '';
+    if (name === PINNED_TAB.name) pinned.push(child);
+    else if (hiddenTabNames.has(name)) hidden.push(child);
+    else scrollable.push(child);
+  });
+
+  return (
+    <View {...props} nativeID={nativeID} style={[styles.tabListContainer, containerStyle]}>
+      <View style={styles.shadowContainer}>
+        <View style={[styles.innerContainer, surfaceStyle]}>
+          <View style={styles.glassHighlight} />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.scrollArea}
+            contentContainerStyle={styles.scrollContent}>
+            {scrollable}
+          </ScrollView>
+          <View style={styles.divider} />
+          <View style={styles.pinnedArea}>{pinned}</View>
+          {hidden}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+type TabButtonProps = TabTriggerSlotProps & {
+  label: string;
+  icon: IconName;
+  selectedIcon: IconName;
+};
+
+export function TabButton({
+  label,
+  icon,
+  selectedIcon,
+  isFocused,
+  onPressIn,
+  onPressOut,
+  ...props
+}: TabButtonProps) {
+  const focusProgress = useSharedValue(isFocused ? 1 : 0);
+  const pressScale = useSharedValue(1);
+
+  useEffect(() => {
+    focusProgress.set(withSpring(isFocused ? 1 : 0, {
+      damping: 15,
+      stiffness: 230,
+      mass: 0.55,
+      reduceMotion: ReduceMotion.System,
+    }));
+  }, [focusProgress, isFocused]);
+
+  const pillAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: focusProgress.value,
+    transform: [
+      { scaleX: interpolate(focusProgress.value, [0, 1], [0.78, 1]) },
+      { scaleY: interpolate(focusProgress.value, [0, 1], [0.88, 1]) },
+    ],
+  }));
+  const iconAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(focusProgress.value, [0, 1], [1, -1]) },
+      { scale: interpolate(focusProgress.value, [0, 1], [0.9, 1.08]) },
+    ],
+  }));
+  const labelAnimatedStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(focusProgress.value, [0, 1], ['#777B75', Colors.light.primary]),
+    opacity: interpolate(focusProgress.value, [0, 1], [0.82, 1]),
+  }));
+  const pressAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pressScale.value }],
+  }));
+
+  return (
+    <Pressable
+      {...props}
+      accessibilityRole="tab"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: Boolean(isFocused) }}
+      onPressIn={(event) => {
+        pressScale.set(withTiming(0.86, { duration: 90, reduceMotion: ReduceMotion.System }));
+        onPressIn?.(event);
+      }}
+      onPressOut={(event) => {
+        pressScale.set(withSpring(1, {
+          damping: 8,
+          stiffness: 250,
+          mass: 0.55,
+          overshootClamping: false,
+          reduceMotion: ReduceMotion.System,
+        }));
+        onPressOut?.(event);
+      }}
+      style={styles.tabButton}>
+      <Animated.View style={[styles.tabButtonView, pressAnimatedStyle]}>
+        <Animated.View style={[styles.selectedTab, pillAnimatedStyle]} />
+        <Animated.View style={[styles.tabForeground, iconAnimatedStyle]}>
+          <MaterialCommunityIcons
+            name={isFocused ? selectedIcon : icon}
+            size={23}
+            color={isFocused ? Colors.light.primary : '#777B75'}
+          />
+        </Animated.View>
+        <Animated.Text style={[styles.tabLabel, labelAnimatedStyle, isFocused && styles.selectedLabel]}>
+          {label}
+        </Animated.Text>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  tabListContainer: {
+    position: 'absolute',
+    bottom: 12,
+    zIndex: 20,
+    width: '100%',
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  shadowContainer: {
+    width: '100%',
+    maxWidth: Math.min(MaxContentWidth, 430),
+    borderRadius: 31,
+    boxShadow: '0 12px 38px rgba(44, 55, 48, 0.16), 0 2px 9px rgba(44, 55, 48, 0.08)',
+  },
+  innerContainer: {
+    minHeight: 66,
+    padding: 5,
+    borderRadius: 31,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.88)',
+    backgroundColor: 'rgba(244, 245, 241, 0.74)',
+    overflow: 'hidden',
+  },
+  glassHighlight: {
+    position: 'absolute',
+    pointerEvents: 'none',
+    top: 1,
+    left: 24,
+    right: 24,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+  },
+  scrollArea: {
+    flex: 1,
+    borderRadius: 25,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    gap: 2,
+  },
+  divider: {
+    width: StyleSheet.hairlineWidth,
+    height: 34,
+    marginHorizontal: 3,
+    backgroundColor: 'rgba(60, 70, 64, 0.18)',
+  },
+  pinnedArea: {
+    flexShrink: 0,
+  },
+  tabButton: {
+    flexGrow: 1,
+    flexShrink: 0,
+    minWidth: 62,
+    borderRadius: 25,
+  },
+  tabButtonView: {
+    position: 'relative',
+    height: 54,
+    minWidth: 62,
+    paddingHorizontal: Spacing.two,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
+  },
+  selectedTab: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    pointerEvents: 'none',
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.92)',
+    boxShadow: '0 3px 10px rgba(42, 72, 55, 0.10)',
+  },
+  tabForeground: {
+    zIndex: 1,
+  },
+  tabLabel: {
+    zIndex: 1,
+    color: '#777B75',
+    fontSize: 10.5,
+    lineHeight: 13,
+    fontWeight: '600',
+    letterSpacing: 0.1,
+  },
+  selectedLabel: {
+    color: Colors.light.primary,
+    fontWeight: '700',
+  },
+  hiddenTab: {
+    display: 'none',
+  },
+});

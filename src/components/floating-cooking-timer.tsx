@@ -56,7 +56,7 @@ export function FloatingCookingTimer() {
       }}
       style={({ pressed }) => [
         styles.floatingTimer,
-        { bottom: Platform.OS === 'web' ? 92 : Math.max(insets.bottom, 10) + 66 },
+        { bottom: Platform.OS === 'web' ? 92 : Math.max(insets.bottom - 6, 8) + 80 },
         timerDone && styles.floatingTimerDone,
         pressed && styles.floatingTimerPressed,
       ]}>
