@@ -5,6 +5,7 @@
 - `migrations/20261101000000_baseline.sql`：`schema.sql` 的基线副本，代表生产库**当前已有**的结构。**不要在生产库重复执行。**
 - `migrations/20261114000000_private_two_person.sql`：两人私用版（白名单、注册拦截、删除邀请等公开版功能）。
 - `migrations/20261114010000_keep_kitchen_on_user_delete.sql`：删账号不再连带删除厨房；收回多余表权限。
+- `migrations/20261115000000_reminders_and_nudges.sql`：提醒、按天完成记录、「催一下」消息（含权限和实时同步）。
 - `migrations/<timestamp>_<name>.sql`：之后的所有增量变更，按时间顺序执行，尽量只新增对象，不删除旧表数据。
 - `rollback/<timestamp>_<name>_down.sql`：每个增量 migration 对应的回滚脚本，只删除该 migration 新增的对象。
 

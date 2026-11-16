@@ -43,7 +43,7 @@ async function scheduleInventoryNotifications(
           language === 'zh'
             ? `${leadDays}天后到期，库存还有 ${item.quantity}${item.unit}。`
             : `Expires in ${leadDays} days. ${item.quantity} ${item.unit} remaining.`,
-        data: { url: '/', itemId: item.id, kind: 'expiry' },
+        data: { url: '/inventory', itemId: item.id, kind: 'expiry' },
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,

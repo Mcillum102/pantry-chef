@@ -14,6 +14,7 @@ import { MemberProvider } from '@/context/member-context';
 import { HealthProvider } from '@/context/health-context';
 import { ReminderProvider } from '@/context/reminder-context';
 import { WidgetProvider } from '@/context/widget-context';
+import { TasksProvider } from '@/context/tasks-context';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -28,6 +29,7 @@ export default function RootLayout() {
               <ReminderProvider>
                 <MemberProvider>
                 <CloudSyncProvider>
+                <TasksProvider>
                 <CookingSessionProvider>
                   <WidgetProvider>
                     <CookingNotificationRouter />
@@ -35,6 +37,7 @@ export default function RootLayout() {
                     <AppLaunchAnimation />
                   </WidgetProvider>
                 </CookingSessionProvider>
+                </TasksProvider>
                 </CloudSyncProvider>
                 </MemberProvider>
               </ReminderProvider>

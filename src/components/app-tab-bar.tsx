@@ -20,7 +20,7 @@ import {
   type ComponentProps,
   type ReactElement,
 } from 'react';
-import { Pressable, ScrollView, StyleSheet, View, type LayoutRectangle, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutRectangle, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   interpolate,
   interpolateColor,
@@ -34,6 +34,7 @@ import Animated, {
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { FloatingCookingTimer } from '@/components/floating-cooking-timer';
+import { useTasks } from '@/context/tasks-context';
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -53,8 +54,9 @@ export type AppTabConfig = {
 
 /** 底部 Tab 栏里可以左右滑动的入口，按顺序显示。新增入口加在这里。 */
 export const SCROLLABLE_TABS: readonly AppTabConfig[] = [
-  // 首页暂时下线，「库存」放在 / 上，打开 App 就是库存页
-  { name: 'index', href: '/', label: '库存', icon: 'fridge-outline', selectedIcon: 'fridge' },
+  // 默认首页：提醒（日历 + 待办 + 催一下）
+  { name: 'index', href: '/', label: '提醒', icon: 'bell-outline', selectedIcon: 'bell' },
+  { name: 'inventory', href: '/inventory', label: '库存', icon: 'fridge-outline', selectedIcon: 'fridge' },
   { name: 'recipes', href: '/recipes', label: '菜谱', icon: 'book-open-outline', selectedIcon: 'book-open-variant' },
   { name: 'games', href: '/games' as Href, label: '游戏', icon: 'gamepad-variant-outline', selectedIcon: 'gamepad-variant' },
 ];
@@ -70,8 +72,6 @@ export const PINNED_TAB: AppTabConfig = {
 
 /** 不显示在 Tab 栏、但需要保留路由的页面 */
 const HIDDEN_TABS: readonly { name: string; href: Href }[] = [
-  // 旧地址 /inventory 仍可打开（通知、书签）
-  { name: 'inventory', href: '/inventory' },
   { name: 'planner', href: '/planner' },
   { name: 'insights', href: '/insights' },
   { name: 'widgets', href: '/widgets' },
@@ -88,6 +88,10 @@ type AppTabsLayoutProps = {
 };
 
 export function AppTabsLayout({ containerStyle, surfaceStyle, nativeID }: AppTabsLayoutProps) {
+  // 「提醒」上的红点：别人发给我、还没看的消息数
+  const { unreadForMe } = useTasks();
+  const badges: Record<string, number> = { index: unreadForMe.length };
+
   return (
     <Tabs>
       <TabSlot style={{ height: '100%' }} />
@@ -95,7 +99,7 @@ export function AppTabsLayout({ containerStyle, surfaceStyle, nativeID }: AppTab
         <CustomTabList containerStyle={containerStyle} surfaceStyle={surfaceStyle} nativeID={nativeID}>
           {SCROLLABLE_TABS.map((tab) => (
             <TabTrigger key={tab.name} name={tab.name} href={tab.href} asChild>
-              <TabButton label={tab.label} icon={tab.icon} selectedIcon={tab.selectedIcon} />
+              <TabButton label={tab.label} icon={tab.icon} selectedIcon={tab.selectedIcon} badge={badges[tab.name]} />
             </TabTrigger>
           ))}
           <TabTrigger name={PINNED_TAB.name} href={PINNED_TAB.href} asChild>
@@ -226,12 +230,14 @@ type TabButtonProps = TabTriggerSlotProps & {
   label: string;
   icon: IconName;
   selectedIcon: IconName;
+  badge?: number;
 };
 
 export function TabButton({
   label,
   icon,
   selectedIcon,
+  badge,
   isFocused,
   onPressIn,
   onPressOut,
@@ -280,7 +286,7 @@ export function TabButton({
     <Pressable
       {...props}
       accessibilityRole="tab"
-      accessibilityLabel={label}
+      accessibilityLabel={badge ? `${label}，${badge} 条新消息` : label}
       accessibilityState={{ selected: Boolean(isFocused) }}
       onLayout={(event) => {
         frameRef.current = event.nativeEvent.layout;
@@ -309,6 +315,11 @@ export function TabButton({
             size={22}
             color={isFocused ? '#FFFFFF' : INACTIVE}
           />
+          {badge ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
+            </View>
+          ) : null}
         </Animated.View>
         <Animated.Text style={[styles.tabLabel, labelAnimatedStyle, isFocused && styles.selectedLabel]}>
           {label}
@@ -430,4 +441,19 @@ const styles = StyleSheet.create({
   hiddenTab: {
     display: 'none',
   },
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#FAF9F5',
+    backgroundColor: '#D9553F',
+  },
+  badgeText: { color: '#FFFFFF', fontSize: 10, lineHeight: 12, fontWeight: '600' },
 });

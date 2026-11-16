@@ -58,3 +58,9 @@ body {
   outline: 2px solid #2e6b4f;
   outline-offset: 2px;
 }
+
+/* 输入框本身有圆角边框和光标，不再额外画浏览器默认的方形焦点框 */
+#root input:focus,
+#root textarea:focus {
+  outline: none;
+}
