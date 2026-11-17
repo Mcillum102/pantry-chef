@@ -3,18 +3,21 @@ import test from 'node:test';
 
 import {
   addDays,
+  cleanSubtasks,
   isAssignedTo,
   monthGrid,
   occursOn,
   overdueOccurrences,
+  recentMessages,
   remindersOn,
+  subtaskProgress,
   weekOf,
   type Reminder,
 } from '../src/data/reminders.ts';
 
 const base: Reminder = {
   id: 'r', title: '倒垃圾', emoji: '🗑️', notes: '', dueDate: '2026-10-26', dueTime: null,
-  repeat: 'none', assignee: 'both', createdBy: 'a',
+  repeat: 'none', assignee: 'both', createdBy: 'a', subtasks: [],
 };
 
 test('one-off reminders only happen on their day', () => {
@@ -79,4 +82,29 @@ test('relative day labels', async () => {
   assert.equal(dayLabel('2026-11-14', '2026-11-15'), '昨天');
   assert.equal(dayLabel('2026-11-18', '2026-11-15'), '11月18日 周三');
   assert.equal(timeAgo(new Date(Date.now() - 5 * 60_000).toISOString()), '5 分钟前');
+});
+
+test('subtask progress is tracked per day for repeating reminders', () => {
+  const towels: Reminder = { ...base, repeat: 'weekly', subtasks: [{ id: 's1', title: '收浴巾' }, { id: 's2', title: '放洗衣机' }] };
+  const checks = [
+    { reminderId: 'r', subtaskId: 's1', occurrenceDate: '2026-10-26', doneBy: 'a' as const },
+    { reminderId: 'r', subtaskId: 'gone', occurrenceDate: '2026-10-26', doneBy: 'a' as const },
+  ];
+  assert.deepEqual(subtaskProgress(towels, checks, '2026-10-26'), { done: 1, total: 2 });
+  assert.deepEqual(subtaskProgress(towels, checks, '2026-11-02'), { done: 0, total: 2 });
+});
+
+test('cleanSubtasks trims, drops blanks and caps the list', () => {
+  const many = Array.from({ length: 25 }, (_, i) => ({ id: `s${i}`, title: ` 第${i}步 ` }));
+  const cleaned = cleanSubtasks([{ id: 'x', title: '   ' }, ...many]);
+  assert.equal(cleaned.length, 20);
+  assert.equal(cleaned[0].title, '第0步');
+});
+
+test('recentMessages keeps the newest 20 in chat order', () => {
+  const messages = Array.from({ length: 30 }, (_, i) => ({ id: String(i), createdAt: `2026-11-16T10:${String(i).padStart(2, '0')}:00Z` }));
+  const shown = recentMessages(messages.slice().reverse());
+  assert.equal(shown.length, 20);
+  assert.equal(shown[0].id, '10');
+  assert.equal(shown[19].id, '29');
 });

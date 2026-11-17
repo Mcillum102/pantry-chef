@@ -4,7 +4,6 @@ import * as WebBrowser from 'expo-web-browser';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  KeyboardAvoidingView,
   Image,
   Modal,
   PanResponder,
@@ -31,6 +30,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { KeyboardAware } from '@/components/keyboard-aware';
+import { MoreOptions } from '@/components/more-options';
 import { GradientSurface, gradientFrom } from '@/components/gradient-surface';
 import { CountUp } from '@/components/count-up';
 import { AppScreen, SectionHeader } from '@/components/app-screen';
@@ -1679,7 +1680,7 @@ export default function InventoryScreen() {
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => setIsSmartAddOpen(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalPage}>
+        <KeyboardAware style={styles.modalPage}>
           <View nativeID="inventory-smart-add-header" style={styles.modalHeader}>
             <Pressable accessibilityRole="button" onPress={() => setIsSmartAddOpen(false)} hitSlop={12}>
               <Text style={styles.modalCancel}>{text('取消', 'Cancel')}</Text>
@@ -1893,7 +1894,7 @@ export default function InventoryScreen() {
               </View>
             ) : null}
           </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAware>
       </Modal>
 
       <Modal
@@ -1902,9 +1903,7 @@ export default function InventoryScreen() {
         presentationStyle="pageSheet"
         onDismiss={handleAddItemDismiss}
         onRequestClose={() => setIsAdding(false)}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalPage}>
+        <KeyboardAware style={styles.modalPage}>
           <View nativeID="inventory-add-header" style={styles.modalHeader}>
             <Pressable
               accessibilityRole="button"
@@ -1932,133 +1931,54 @@ export default function InventoryScreen() {
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.form}
             showsVerticalScrollIndicator={false}>
-            {!editingItemId ? (
-              <View style={styles.quickPresetSection}>
-                <View style={styles.quickPresetHeader}>
-                  <Text style={styles.fieldLabel}>{text('为你推荐', 'Suggested for you')}</Text>
-                  <Text style={styles.quickPresetHint}>{text('根据添加习惯排序', 'Based on your habits')}</Text>
-                </View>
-                {personalizedQuickItems.length > 0 ? (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.quickPresetList}>
-                    {personalizedQuickItems.map((preset) => (
-                      <Pressable
-                        key={`${preset.name}-${preset.unit}`}
-                        accessibilityRole="button"
-                        accessibilityLabel={text(
-                          `快速填写${preset.name}，常用数量${formatAmount(formatQuantity(preset.quantity), preset.unit, language)}`,
-                          `Quick fill ${localizeContent(preset.name, 'en')}, usual amount ${formatAmount(formatQuantity(preset.quantity), preset.unit, 'en')}`
-                        )}
-                        onPress={() => applyQuickItemPreset(preset)}
-                        style={styles.quickPresetChip}>
-                        <Text style={styles.quickPresetEmoji}>{preset.emoji}</Text>
-                        <View style={styles.quickPresetCopy}>
-                          <Text style={styles.quickPresetName}>
-                            {localizeContent(preset.name, language)}
-                          </Text>
-                          <Text style={styles.quickPresetAmount}>
-                            {formatAmount(formatQuantity(preset.quantity), preset.unit, language)}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                ) : (
-                  <View style={styles.quickPresetEmpty}>
-                    <Text style={styles.quickPresetEmptyText}>
-                      {text(
-                        '添加几次物品后，这里会学习你的常用品和惯用数量。',
-                        'Your frequent items and usual amounts will appear after a few additions.'
-                      )}
-                    </Text>
-                  </View>
-                )}
+            {!editingItemId && personalizedQuickItems.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.quickPresetList}>
+                {personalizedQuickItems.map((preset) => (
+                  <Pressable
+                    key={`${preset.name}-${preset.unit}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={text(
+                      `快速填写${preset.name}，常用数量${formatAmount(formatQuantity(preset.quantity), preset.unit, language)}`,
+                      `Quick fill ${localizeContent(preset.name, 'en')}, usual amount ${formatAmount(formatQuantity(preset.quantity), preset.unit, 'en')}`
+                    )}
+                    onPress={() => applyQuickItemPreset(preset)}
+                    style={styles.quickPresetChip}>
+                    <Text style={styles.quickPresetEmoji}>{preset.emoji}</Text>
+                    <View style={styles.quickPresetCopy}>
+                      <Text style={styles.quickPresetName}>
+                        {localizeContent(preset.name, language)}
+                      </Text>
+                      <Text style={styles.quickPresetAmount}>
+                        {formatAmount(formatQuantity(preset.quantity), preset.unit, language)}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : null}
+            {!editingItemId && scanStatus ? (
+              <Text style={styles.scanStatus}>
+                {scanStatus}{barcode ? ` · ${barcode}` : ''}
+              </Text>
+            ) : null}
+
+            <View style={styles.nameLabelRow}>
+              <Text style={styles.fieldLabel}>{text('物品名称', 'Item name')}</Text>
+              {!editingItemId ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={text('扫描商品条形码', 'Scan a product barcode')}
+                  hitSlop={6}
                   onPress={() => setIsScannerOpen(true)}
-                  style={styles.scanBarcodeButton}>
-                  <Ionicons name="barcode-outline" size={20} color={Colors.light.primary} />
-                  <View style={styles.scanBarcodeCopy}>
-                    <Text style={styles.scanBarcodeTitle}>{text('扫描条形码自动填写', 'Scan barcode to fill details')}</Text>
-                    <Text style={styles.scanBarcodeText}>{text('使用 Open Food Facts 公开商品资料', 'Uses the public Open Food Facts database')}</Text>
-                  </View>
-                  <Text style={styles.scanBarcodeChevron}>›</Text>
+                  style={({ pressed }) => [styles.scanChip, pressed && styles.chipPressed]}>
+                  <Ionicons name="barcode-outline" size={16} color={Colors.light.primary} />
+                  <Text style={styles.scanChipText}>{text('扫码', 'Scan')}</Text>
                 </Pressable>
-                {scanStatus ? (
-                  <Text style={styles.scanStatus}>
-                    {scanStatus}{barcode ? ` · ${barcode}` : ''}
-                  </Text>
-                ) : null}
-              </View>
-            ) : null}
-            <Text style={styles.fieldLabel}>{text('放入哪个库', 'Inventory category')}</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.modalLibraryOptions}>
-              {libraries.map((option) => (
-                <Pressable
-                  key={option.key}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: library === option.key }}
-                  onPress={() => chooseLibrary(option.key)}
-                  style={[
-                    styles.modalLibraryOption,
-                    library === option.key && styles.modalLibraryOptionSelected,
-                    library === option.key && {
-                      backgroundColor: colorWithAlpha(option.color, '1F'),
-                      borderColor: option.color,
-                    },
-                  ]}>
-                  <Text style={styles.modalLibraryEmoji}>{option.emoji}</Text>
-                  <Text
-                    style={[
-                      styles.modalLibraryLabel,
-                      library === option.key && styles.modalLibraryLabelSelected,
-                      library === option.key && { color: option.color },
-                    ]}>
-                    {localizeContent(option.key, language)}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.fieldLabel}>{text('选择 Emoji', 'Choose an emoji')}</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.emojiOptions}>
-              {getEmojiOptions(library).map((option) => (
-                <Pressable
-                  key={option}
-                  accessibilityRole="radio"
-                  accessibilityLabel={text(`选择 ${option}`, `Choose ${option}`)}
-                  accessibilityState={{ checked: emoji === option }}
-                  onPress={() => setEmoji(option)}
-                  style={[styles.emojiOption, emoji === option && styles.emojiOptionSelected]}>
-                  <Text style={styles.emojiOptionText}>{option}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            <View style={styles.customEmojiRow}>
-              <Text style={styles.customEmojiHint}>{text('没有合适的？', 'Need another one?')}</Text>
-              <TextInput
-                accessibilityLabel={text('自定义 Emoji', 'Custom emoji')}
-                value={emoji}
-                onChangeText={setEmoji}
-                maxLength={16}
-                autoCapitalize="none"
-                placeholder={text('输入任意 Emoji', 'Enter any emoji')}
-                placeholderTextColor={Colors.light.textSecondary}
-                style={styles.customEmojiInput}
-              />
+              ) : null}
             </View>
-
-            <Text style={styles.fieldLabel}>{text('物品名称', 'Item name')}</Text>
             <TextInput
               autoFocus
               value={editingItemId && language === 'en' ? localizeContent(name, language) : name}
@@ -2109,24 +2029,39 @@ export default function InventoryScreen() {
                   </Text>
                 </Pressable>
               ))}
-              <Text style={styles.unitCustomHint}>{text('也可在上方输入自定义单位', 'Or enter a custom unit above')}</Text>
             </View>
 
-            {library === '饮料' ? (
-              <>
-                <Text style={styles.fieldLabel}>
-                  {text(`每${unit || '份'}容量（毫升）`, `Volume per ${localizeContent(unit || 'item', language)} (mL)`)}
-                </Text>
-                <TextInput
-                  value={volumeMl}
-                  onChangeText={setVolumeMl}
-                  keyboardType="decimal-pad"
-                  placeholder={text('例如：500', 'For example: 500')}
-                  placeholderTextColor={Colors.light.textSecondary}
-                  style={[styles.input, !validVolume && styles.inputError]}
-                />
-              </>
-            ) : null}
+            <Text style={styles.fieldLabel}>{text('放入哪个库', 'Inventory category')}</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.modalLibraryOptions}>
+              {libraries.map((option) => (
+                <Pressable
+                  key={option.key}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: library === option.key }}
+                  onPress={() => chooseLibrary(option.key)}
+                  style={[
+                    styles.modalLibraryOption,
+                    library === option.key && styles.modalLibraryOptionSelected,
+                    library === option.key && {
+                      backgroundColor: colorWithAlpha(option.color, '1F'),
+                      borderColor: option.color,
+                    },
+                  ]}>
+                  <Text style={styles.modalLibraryEmoji}>{option.emoji}</Text>
+                  <Text
+                    style={[
+                      styles.modalLibraryLabel,
+                      library === option.key && styles.modalLibraryLabelSelected,
+                      library === option.key && { color: option.color },
+                    ]}>
+                    {localizeContent(option.key, language)}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
 
             <Text style={styles.fieldLabel}>{text('存放位置', 'Storage location')}</Text>
             <ScrollView
@@ -2179,75 +2114,6 @@ export default function InventoryScreen() {
               </View>
             ) : null}
 
-            <View style={styles.shelfSuggestionCard}>
-              <View style={styles.shelfSuggestionHeader}>
-                <View style={styles.shelfSuggestionIcon}>
-                  <Ionicons name="cloud-outline" size={19} color={Colors.light.primary} />
-                </View>
-                <View style={styles.shelfSuggestionHeading}>
-                  <Text style={styles.shelfSuggestionEyebrow}>{text('权威资料建议', 'TRUSTED STORAGE GUIDANCE')}</Text>
-                  <Text style={styles.shelfSuggestionTitle}>
-                    {shelfLifeSuggestion?.title ?? text('填写名称后匹配保存期限', 'Enter a name to match a storage time')}
-                  </Text>
-                </View>
-              </View>
-              {shelfLifeSuggestion ? (
-                <>
-                  <View style={styles.shelfSuggestionResult}>
-                    <Text style={styles.shelfSuggestionRange}>
-                      {shelfLifeSuggestion.rangeLabel}
-                    </Text>
-                    <Text style={styles.shelfSuggestionNote}>{shelfLifeSuggestion.note}</Text>
-                  </View>
-                  <View style={styles.shelfSuggestionActions}>
-                    <Pressable
-                      accessibilityRole="link"
-                      accessibilityLabel={text(`查看${shelfLifeSuggestion.sourceLabel}`, `View ${shelfLifeSuggestion.sourceLabel}`)}
-                      onPress={() => void WebBrowser.openBrowserAsync(shelfLifeSuggestion.sourceUrl)}
-                      style={({ pressed }) => pressed && styles.searchClearPressed}>
-                      <Text style={styles.shelfSuggestionSource}>
-                        {shelfLifeSuggestion.sourceLabel} ↗
-                      </Text>
-                    </Pressable>
-                    {shelfLifeSuggestion.recommendedDays ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={text('应用建议保质期', 'Apply suggested expiry date')}
-                        onPress={applyShelfLifeSuggestion}
-                        style={({ pressed }) => [
-                          styles.applySuggestionButton,
-                          pressed && styles.chipPressed,
-                        ]}>
-                        <Text style={styles.applySuggestionText}>{text('应用建议', 'Apply')}</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                </>
-              ) : (
-                <Text style={styles.shelfSuggestionNote}>
-                  {text(
-                    '输入物品名称并选择存放位置后，会匹配加拿大卫生部与 USDA FoodKeeper 的公开保存资料。',
-                    'Enter an item name and storage location to match public guidance from Health Canada and USDA FoodKeeper.'
-                  )}
-                </Text>
-              )}
-              <Text style={styles.shelfSuggestionDisclaimer}>
-                {text(
-                  '建议仅作提醒；包装日期和储存说明优先。食物状态可疑时请勿食用。',
-                  'Guidance is for reminders only. Follow package dates and storage instructions first; discard food when in doubt.'
-                )}
-              </Text>
-            </View>
-
-            <Text style={styles.fieldLabel}>{text('购买日期', 'Purchase date')}</Text>
-            <TextInput
-              value={purchaseDate}
-              onChangeText={setPurchaseDate}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={Colors.light.textSecondary}
-              style={[styles.input, !validPurchaseDate && styles.inputError]}
-            />
-
             <Text style={styles.fieldLabel}>{text('保质期设置', 'Expiry setting')}</Text>
             <View style={styles.expiryOptions}>
               <Pressable
@@ -2289,68 +2155,197 @@ export default function InventoryScreen() {
               </>
             ) : null}
 
-            <Text style={styles.fieldLabel}>{text('开封状态', 'Opened status')}</Text>
-            <View style={styles.expiryOptions}>
-              <Pressable
-                accessibilityRole="radio"
-                accessibilityState={{ checked: !hasOpened }}
-                onPress={() => setHasOpened(false)}
-                style={[styles.expiryOption, !hasOpened && styles.expiryOptionSelected]}>
-                <Text style={[styles.expiryOptionText, !hasOpened && styles.expiryOptionTextSelected]}>{text('未开封', 'Unopened')}</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="radio"
-                accessibilityState={{ checked: hasOpened }}
-                onPress={() => setHasOpened(true)}
-                style={[styles.expiryOption, hasOpened && styles.expiryOptionSelected]}>
-                <Text style={[styles.expiryOptionText, hasOpened && styles.expiryOptionTextSelected]}>{text('已开封', 'Opened')}</Text>
-              </Pressable>
-            </View>
-            {hasOpened ? (
-              <View style={styles.openedFields}>
-                <View style={styles.halfField}>
-                  <Text style={styles.fieldLabel}>{text('开封日期', 'Opened on')}</Text>
-                  <TextInput value={openedAt} onChangeText={setOpenedAt} placeholder="YYYY-MM-DD" placeholderTextColor={Colors.light.textSecondary} style={[styles.input, !validOpenedDate && styles.inputError]} />
-                </View>
-                <View style={styles.halfField}>
-                  <Text style={styles.fieldLabel}>{text('开封后到期', 'Use by')}</Text>
-                  <TextInput value={openedExpiryDate} onChangeText={setOpenedExpiryDate} placeholder="YYYY-MM-DD" placeholderTextColor={Colors.light.textSecondary} style={[styles.input, !validOpenedDate && styles.inputError]} />
-                </View>
+            {hasExpiry && shelfLifeSuggestion?.recommendedDays ? (
+              <View style={styles.compactSuggestion}>
+                <Ionicons name="bulb-outline" size={16} color={Colors.light.primary} />
+                <Text style={styles.compactSuggestionText} numberOfLines={1}>
+                  {text('建议', 'Suggested')} {shelfLifeSuggestion.rangeLabel}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={text('应用建议保质期', 'Apply suggested expiry date')}
+                  onPress={applyShelfLifeSuggestion}
+                  style={({ pressed }) => [styles.applySuggestionButton, pressed && styles.chipPressed]}>
+                  <Text style={styles.applySuggestionText}>{text('应用', 'Apply')}</Text>
+                </Pressable>
               </View>
             ) : null}
 
-            {library === '食材' ? (
-              <>
-                <Text style={styles.fieldLabel}>{text('做菜建议（选填）', 'Cooking ideas (optional)')}</Text>
-                <TextInput
-                  value={
-                    editingItemId && language === 'en'
-                      ? cookingSuggestion
-                          .split('、')
-                          .map((suggestion) => localizeContent(suggestion, language))
-                          .join(', ')
-                      : cookingSuggestion
-                  }
-                  onChangeText={setCookingSuggestion}
-                  multiline
-                  placeholder={text('例如：番茄炒蛋、番茄鸡蛋面', 'For example: tomato & eggs, tomato egg noodles')}
-                  placeholderTextColor={Colors.light.textSecondary}
-                  style={[styles.input, styles.suggestionInput]}
-                />
-              </>
-            ) : null}
+            <MoreOptions
+              label={text('更多选项', 'More options')}
+              summary={text('图标、购买日期、开封状态等', 'Emoji, purchase date, opened…')}
+              forceOpen={!validPurchaseDate || !validOpenedDate || (library === '饮料' && !validVolume)}>
+              <Text style={styles.fieldLabel}>{text('选择 Emoji', 'Choose an emoji')}</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.emojiOptions}>
+                {getEmojiOptions(library).map((option) => (
+                  <Pressable
+                    key={option}
+                    accessibilityRole="radio"
+                    accessibilityLabel={text(`选择 ${option}`, `Choose ${option}`)}
+                    accessibilityState={{ checked: emoji === option }}
+                    onPress={() => setEmoji(option)}
+                    style={[styles.emojiOption, emoji === option && styles.emojiOptionSelected]}>
+                    <Text style={styles.emojiOptionText}>{option}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
 
-            <View style={styles.formHint}>
-              <Text style={styles.formHintIcon}>💡</Text>
-              <Text style={styles.formHintText}>
-                {text(
-                  `物品会加入${library}库；购买和到期日期可以在详情中随时查看。`,
-                  `This item will be added to ${localizeContent(library, language)}. Purchase and expiry dates remain available in its details.`
+              <View style={styles.customEmojiRow}>
+                <Text style={styles.customEmojiHint}>{text('没有合适的？', 'Need another one?')}</Text>
+                <TextInput
+                  accessibilityLabel={text('自定义 Emoji', 'Custom emoji')}
+                  value={emoji}
+                  onChangeText={setEmoji}
+                  maxLength={16}
+                  autoCapitalize="none"
+                  placeholder={text('输入任意 Emoji', 'Enter any emoji')}
+                  placeholderTextColor={Colors.light.textSecondary}
+                  style={styles.customEmojiInput}
+                />
+              </View>
+
+              {library === '饮料' ? (
+                <>
+                  <Text style={styles.fieldLabel}>
+                    {text(`每${unit || '份'}容量（毫升）`, `Volume per ${localizeContent(unit || 'item', language)} (mL)`)}
+                  </Text>
+                  <TextInput
+                    value={volumeMl}
+                    onChangeText={setVolumeMl}
+                    keyboardType="decimal-pad"
+                    placeholder={text('例如：500', 'For example: 500')}
+                    placeholderTextColor={Colors.light.textSecondary}
+                    style={[styles.input, !validVolume && styles.inputError]}
+                  />
+                </>
+              ) : null}
+
+              <Text style={styles.fieldLabel}>{text('购买日期', 'Purchase date')}</Text>
+              <TextInput
+                value={purchaseDate}
+                onChangeText={setPurchaseDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={Colors.light.textSecondary}
+                style={[styles.input, !validPurchaseDate && styles.inputError]}
+              />
+
+              <Text style={styles.fieldLabel}>{text('开封状态', 'Opened status')}</Text>
+              <View style={styles.expiryOptions}>
+                <Pressable
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: !hasOpened }}
+                  onPress={() => setHasOpened(false)}
+                  style={[styles.expiryOption, !hasOpened && styles.expiryOptionSelected]}>
+                  <Text style={[styles.expiryOptionText, !hasOpened && styles.expiryOptionTextSelected]}>{text('未开封', 'Unopened')}</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: hasOpened }}
+                  onPress={() => setHasOpened(true)}
+                  style={[styles.expiryOption, hasOpened && styles.expiryOptionSelected]}>
+                  <Text style={[styles.expiryOptionText, hasOpened && styles.expiryOptionTextSelected]}>{text('已开封', 'Opened')}</Text>
+                </Pressable>
+              </View>
+              {hasOpened ? (
+                <View style={styles.openedFields}>
+                  <View style={styles.halfField}>
+                    <Text style={styles.fieldLabel}>{text('开封日期', 'Opened on')}</Text>
+                    <TextInput value={openedAt} onChangeText={setOpenedAt} placeholder="YYYY-MM-DD" placeholderTextColor={Colors.light.textSecondary} style={[styles.input, !validOpenedDate && styles.inputError]} />
+                  </View>
+                  <View style={styles.halfField}>
+                    <Text style={styles.fieldLabel}>{text('开封后到期', 'Use by')}</Text>
+                    <TextInput value={openedExpiryDate} onChangeText={setOpenedExpiryDate} placeholder="YYYY-MM-DD" placeholderTextColor={Colors.light.textSecondary} style={[styles.input, !validOpenedDate && styles.inputError]} />
+                  </View>
+                </View>
+              ) : null}
+
+              {library === '食材' ? (
+                <>
+                  <Text style={styles.fieldLabel}>{text('做菜建议（选填）', 'Cooking ideas (optional)')}</Text>
+                  <TextInput
+                    value={
+                      editingItemId && language === 'en'
+                        ? cookingSuggestion
+                            .split('、')
+                            .map((suggestion) => localizeContent(suggestion, language))
+                            .join(', ')
+                        : cookingSuggestion
+                    }
+                    onChangeText={setCookingSuggestion}
+                    multiline
+                    placeholder={text('例如：番茄炒蛋、番茄鸡蛋面', 'For example: tomato & eggs, tomato egg noodles')}
+                    placeholderTextColor={Colors.light.textSecondary}
+                    style={[styles.input, styles.suggestionInput]}
+                  />
+                </>
+              ) : null}
+
+              <View style={styles.shelfSuggestionCard}>
+                <View style={styles.shelfSuggestionHeader}>
+                  <View style={styles.shelfSuggestionIcon}>
+                    <Ionicons name="cloud-outline" size={19} color={Colors.light.primary} />
+                  </View>
+                  <View style={styles.shelfSuggestionHeading}>
+                    <Text style={styles.shelfSuggestionEyebrow}>{text('权威资料建议', 'TRUSTED STORAGE GUIDANCE')}</Text>
+                    <Text style={styles.shelfSuggestionTitle}>
+                      {shelfLifeSuggestion?.title ?? text('填写名称后匹配保存期限', 'Enter a name to match a storage time')}
+                    </Text>
+                  </View>
+                </View>
+                {shelfLifeSuggestion ? (
+                  <>
+                    <View style={styles.shelfSuggestionResult}>
+                      <Text style={styles.shelfSuggestionRange}>
+                        {shelfLifeSuggestion.rangeLabel}
+                      </Text>
+                      <Text style={styles.shelfSuggestionNote}>{shelfLifeSuggestion.note}</Text>
+                    </View>
+                    <View style={styles.shelfSuggestionActions}>
+                      <Pressable
+                        accessibilityRole="link"
+                        accessibilityLabel={text(`查看${shelfLifeSuggestion.sourceLabel}`, `View ${shelfLifeSuggestion.sourceLabel}`)}
+                        onPress={() => void WebBrowser.openBrowserAsync(shelfLifeSuggestion.sourceUrl)}
+                        style={({ pressed }) => pressed && styles.searchClearPressed}>
+                        <Text style={styles.shelfSuggestionSource}>
+                          {shelfLifeSuggestion.sourceLabel} ↗
+                        </Text>
+                      </Pressable>
+                      {shelfLifeSuggestion.recommendedDays ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={text('应用建议保质期', 'Apply suggested expiry date')}
+                          onPress={applyShelfLifeSuggestion}
+                          style={({ pressed }) => [
+                            styles.applySuggestionButton,
+                            pressed && styles.chipPressed,
+                          ]}>
+                          <Text style={styles.applySuggestionText}>{text('应用建议', 'Apply')}</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  </>
+                ) : (
+                  <Text style={styles.shelfSuggestionNote}>
+                    {text(
+                      '输入物品名称并选择存放位置后，会匹配加拿大卫生部与 USDA FoodKeeper 的公开保存资料。',
+                      'Enter an item name and storage location to match public guidance from Health Canada and USDA FoodKeeper.'
+                    )}
+                  </Text>
                 )}
-              </Text>
-            </View>
+                <Text style={styles.shelfSuggestionDisclaimer}>
+                  {text(
+                    '建议仅作提醒；包装日期和储存说明优先。食物状态可疑时请勿食用。',
+                    'Guidance is for reminders only. Follow package dates and storage instructions first; discard food when in doubt.'
+                  )}
+                </Text>
+              </View>
+
+            </MoreOptions>
           </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAware>
       </Modal>
 
       <Modal
@@ -3077,9 +3072,7 @@ export default function InventoryScreen() {
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => setIsCreatingLibrary(false)}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalPage}>
+        <KeyboardAware style={styles.modalPage}>
           <View style={styles.modalHeader}>
             <Pressable
               accessibilityRole="button"
@@ -3167,7 +3160,7 @@ export default function InventoryScreen() {
               </View>
             </View>
           </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAware>
       </Modal>
 
       <Modal
@@ -3278,6 +3271,11 @@ export default function InventoryScreen() {
 }
 
 const styles = StyleSheet.create({
+  nameLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  scanChip: { minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, borderRadius: 16, backgroundColor: Colors.light.primarySoft },
+  scanChipText: { color: Colors.light.primary, fontSize: 13, fontWeight: '600' },
+  compactSuggestion: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12, paddingRight: 6, borderRadius: 14, backgroundColor: Colors.light.backgroundElement },
+  compactSuggestionText: { flex: 1, color: Colors.light.text, fontSize: 14 },
   openedFields: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   halfField: { flex: 1, gap: 5 },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
@@ -3646,22 +3644,12 @@ const styles = StyleSheet.create({
   modalSave: { color: Colors.light.primary, fontSize: 16, fontWeight: '600' },
   modalSaveDisabled: { opacity: 0.35 },
   form: { padding: 22, gap: 13 },
-  quickPresetSection: { gap: 9, marginBottom: 2 },
-  quickPresetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  quickPresetHint: { color: Colors.light.textSecondary, fontSize: 12 },
   quickPresetList: { gap: 8, paddingRight: 8 },
   quickPresetChip: { minWidth: 104, minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12, borderRadius: 16, backgroundColor: Colors.light.primarySoft },
   quickPresetEmoji: { fontSize: 20 },
   quickPresetCopy: { gap: 2 },
   quickPresetName: { color: Colors.light.primary, fontSize: 13, fontWeight: '600' },
   quickPresetAmount: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '500' },
-  quickPresetEmpty: { minHeight: 54, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16, backgroundColor: Colors.light.backgroundElement },
-  quickPresetEmptyText: { color: Colors.light.textSecondary, fontSize: 12.5, lineHeight: 17 },
-  scanBarcodeButton: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 13, borderRadius: 17, borderWidth: 1, borderColor: '#B7DCC5', backgroundColor: Colors.light.primarySoft },
-  scanBarcodeCopy: { flex: 1, gap: 3 },
-  scanBarcodeTitle: { color: Colors.light.primary, fontSize: 14, fontWeight: '600' },
-  scanBarcodeText: { color: Colors.light.textSecondary, fontSize: 11 },
-  scanBarcodeChevron: { color: Colors.light.primary, fontSize: 22 },
   scanStatus: { color: Colors.light.primary, fontSize: 12, lineHeight: 16, fontWeight: '500' },
   fieldLabel: { color: Colors.light.text, fontSize: 15, fontWeight: '600', marginTop: 4 },
   input: {
@@ -3753,7 +3741,6 @@ const styles = StyleSheet.create({
   },
   unitPresetText: { color: Colors.light.textSecondary, fontSize: 12, fontWeight: '500' },
   unitPresetTextSelected: { color: Colors.light.primary, fontWeight: '600' },
-  unitCustomHint: { color: Colors.light.textSecondary, fontSize: 11.5, fontWeight: '500' },
   storageOptions: { gap: 7, paddingRight: 14 },
   storageOption: {
     minWidth: 76,
@@ -3859,16 +3846,6 @@ const styles = StyleSheet.create({
   },
   expiryOptionText: { color: Colors.light.textSecondary, fontSize: 13, fontWeight: '500' },
   expiryOptionTextSelected: { color: Colors.light.primary, fontWeight: '600' },
-  formHint: {
-    marginTop: 12,
-    flexDirection: 'row',
-    gap: 10,
-    padding: 15,
-    borderRadius: 15,
-    backgroundColor: Colors.light.primarySoft,
-  },
-  formHintIcon: { fontSize: 18 },
-  formHintText: { flex: 1, color: Colors.light.primary, fontSize: 13, lineHeight: 20 },
   detailModalPage: {
     flex: 1,
     overflow: 'hidden',

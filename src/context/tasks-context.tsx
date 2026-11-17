@@ -10,6 +10,7 @@ import {
   type Nudge,
   type Reminder,
   type ReminderCompletion,
+  type SubtaskCheck,
 } from '@/data/reminders';
 import { usePersistentState } from '@/hooks/use-persistent-state';
 import {
@@ -21,6 +22,8 @@ import {
   saveReminderRow,
   sendNudgeRow,
   setCompletionRow,
+  setSubtaskCheckRow,
+  SubtasksNotInstalledError,
   subscribeReminders,
 } from '@/services/reminders-api';
 
@@ -30,14 +33,17 @@ import {
  */
 export type TasksStatus = 'local' | 'loading' | 'ready' | 'needs-setup' | 'error';
 
-type TasksSnapshot = { reminders: Reminder[]; completions: ReminderCompletion[]; nudges: Nudge[] };
+type TasksSnapshot = { reminders: Reminder[]; completions: ReminderCompletion[]; nudges: Nudge[]; subtaskChecks: SubtaskCheck[] };
 
 type TasksContextValue = TasksSnapshot & {
   status: TasksStatus;
+  /** 云端已经执行了子任务的 migration（本机模式下总是 true） */
+  subtasksReady: boolean;
   me: MemberId;
   saveReminder: (reminder: Omit<Reminder, 'id' | 'createdBy'> & { id?: string }) => Promise<void>;
   deleteReminder: (id: string) => Promise<void>;
   setDone: (reminder: Reminder, date: string, done: boolean) => Promise<void>;
+  setSubtaskDone: (reminder: Reminder, subtaskId: string, date: string, done: boolean) => Promise<void>;
   sendNudge: (message: string, reminderId?: string | null) => Promise<void>;
   markRead: (ids: string[]) => Promise<void>;
   /** 发给我、还没看的「催一下」，最新的在前 */
@@ -47,7 +53,17 @@ type TasksContextValue = TasksSnapshot & {
 
 const TasksContext = createContext<TasksContextValue | null>(null);
 
-const EMPTY: TasksSnapshot = { reminders: [], completions: [], nudges: [] };
+const EMPTY: TasksSnapshot = { reminders: [], completions: [], nudges: [], subtaskChecks: [] };
+
+/** 旧版本缓存里没有子任务字段，读出来时补齐 */
+function normalizeSnapshot(snapshot: Partial<TasksSnapshot> | null | undefined): TasksSnapshot {
+  return {
+    reminders: (snapshot?.reminders ?? []).map((r) => ({ ...r, subtasks: Array.isArray(r.subtasks) ? r.subtasks : [] })),
+    completions: snapshot?.completions ?? [],
+    nudges: snapshot?.nudges ?? [],
+    subtaskChecks: snapshot?.subtaskChecks ?? [],
+  };
+}
 
 export function TasksProvider({ children }: PropsWithChildren) {
   const { configured, household } = useCloudSync();
@@ -56,7 +72,9 @@ export function TasksProvider({ children }: PropsWithChildren) {
   const householdId = household?.id ?? null;
 
   // 云端数据的本机缓存：离线时也能先看到上次的内容；未配置云端时它就是唯一的数据源
-  const [cache, setCache] = usePersistentState<TasksSnapshot>('tasks-cache-v1', EMPTY);
+  const [storedCache, setCache] = usePersistentState<TasksSnapshot>('tasks-cache-v1', EMPTY);
+  const cache = useMemo(() => normalizeSnapshot(storedCache), [storedCache]);
+  const [subtasksReady, setSubtasksReady] = useState(true);
   const [status, setStatus] = useState<TasksStatus>(configured ? 'loading' : 'local');
   const [nonce, setNonce] = useState(0);
   const cloud = configured && Boolean(householdId);
@@ -66,8 +84,9 @@ export function TasksProvider({ children }: PropsWithChildren) {
   const load = useCallback(async () => {
     if (!cloud || !householdId) return;
     try {
-      const data = await fetchRemindersData(householdId, addDays(toDateKey(new Date()), -45));
+      const { subtasksReady: ready, ...data } = await fetchRemindersData(householdId, addDays(toDateKey(new Date()), -45));
       setCache(data);
+      setSubtasksReady(ready);
       setStatus('ready');
     } catch (error) {
       setStatus(error instanceof RemindersNotInstalledError ? 'needs-setup' : 'error');
@@ -99,20 +118,22 @@ export function TasksProvider({ children }: PropsWithChildren) {
   /** 先改本机（界面立刻响应），再写云端；云端失败就恢复原样并抛出错误 */
   const mutate = useCallback(async (apply: (current: TasksSnapshot) => TasksSnapshot, remote?: () => Promise<void>) => {
     const before = cacheRef.current;
-    setCache((current) => apply(current));
+    setCache((current) => apply(normalizeSnapshot(current)));
     if (!cloud || !remote) return;
     try {
       await remote();
     } catch (error) {
       setCache(before);
       if (error instanceof RemindersNotInstalledError) setStatus('needs-setup');
+      if (error instanceof SubtasksNotInstalledError) setSubtasksReady(false);
       throw error;
     }
   }, [cloud, setCache]);
 
   const saveReminder = useCallback<TasksContextValue['saveReminder']>(async (input) => {
     const existing = input.id ? cacheRef.current.reminders.find((r) => r.id === input.id) : undefined;
-    const reminder: Reminder = { ...input, id: input.id ?? newId(), createdBy: existing?.createdBy ?? me };
+    const reminder: Reminder = { ...input, subtasks: input.subtasks ?? [], id: input.id ?? newId(), createdBy: existing?.createdBy ?? me };
+    if (cloud && !subtasksReady && reminder.subtasks.length > 0) throw new SubtasksNotInstalledError();
     await mutate(
       (current) => ({
         ...current,
@@ -120,9 +141,9 @@ export function TasksProvider({ children }: PropsWithChildren) {
           ? current.reminders.map((r) => (r.id === reminder.id ? reminder : r))
           : [...current.reminders, reminder],
       }),
-      householdId ? () => saveReminderRow(householdId, reminder) : undefined
+      householdId ? () => saveReminderRow(householdId, reminder, subtasksReady) : undefined
     );
-  }, [householdId, me, mutate]);
+  }, [cloud, householdId, me, mutate, subtasksReady]);
 
   const deleteReminder = useCallback(async (id: string) => {
     await mutate(
@@ -130,6 +151,7 @@ export function TasksProvider({ children }: PropsWithChildren) {
         ...current,
         reminders: current.reminders.filter((r) => r.id !== id),
         completions: current.completions.filter((c) => c.reminderId !== id),
+        subtaskChecks: current.subtaskChecks.filter((c) => c.reminderId !== id),
       }),
       () => deleteReminderRow(id)
     );
@@ -145,6 +167,19 @@ export function TasksProvider({ children }: PropsWithChildren) {
           : current.completions.filter((c) => !(c.reminderId === reminder.id && c.occurrenceDate === date)),
       }),
       householdId ? () => setCompletionRow(householdId, reminder.id, date, me, done) : undefined
+    );
+  }, [householdId, me, mutate]);
+
+  const setSubtaskDone = useCallback(async (reminder: Reminder, subtaskId: string, date: string, done: boolean) => {
+    const same = (c: SubtaskCheck) => c.reminderId === reminder.id && c.subtaskId === subtaskId && c.occurrenceDate === date;
+    await mutate(
+      (current) => ({
+        ...current,
+        subtaskChecks: done
+          ? [...current.subtaskChecks.filter((c) => !same(c)), { reminderId: reminder.id, subtaskId, occurrenceDate: date, doneBy: me }]
+          : current.subtaskChecks.filter((c) => !same(c)),
+      }),
+      householdId ? () => setSubtaskCheckRow(householdId, reminder.id, subtaskId, date, me, done) : undefined
     );
   }, [householdId, me, mutate]);
 
@@ -176,15 +211,17 @@ export function TasksProvider({ children }: PropsWithChildren) {
   const value = useMemo<TasksContextValue>(() => ({
     ...cache,
     status,
+    subtasksReady: !cloud || subtasksReady,
     me,
     saveReminder,
     deleteReminder,
     setDone,
+    setSubtaskDone,
     sendNudge,
     markRead,
     unreadForMe,
     refresh: () => setNonce((n) => n + 1),
-  }), [cache, deleteReminder, markRead, me, saveReminder, sendNudge, setDone, status, unreadForMe]);
+  }), [cache, cloud, deleteReminder, markRead, me, saveReminder, sendNudge, setDone, setSubtaskDone, status, subtasksReady, unreadForMe]);
 
   return <TasksContext.Provider value={value}>{children}</TasksContext.Provider>;
 }

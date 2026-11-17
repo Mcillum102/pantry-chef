@@ -6,6 +6,7 @@ import { AppLaunchAnimation } from '@/components/app-launch-animation';
 import { AppErrorBoundary } from '@/components/app-error-boundary';
 import { AppAccessGate } from '@/components/app-access-gate';
 import { CookingNotificationRouter } from '@/components/cooking-notification-router';
+import { ViewportGuard } from '@/components/viewport-guard';
 import { CloudSyncProvider } from '@/context/cloud-sync-context';
 import { CookingSessionProvider } from '@/context/cooking-session-context';
 import { KitchenProvider } from '@/context/kitchen-context';
@@ -32,6 +33,7 @@ export default function RootLayout() {
                 <TasksProvider>
                 <CookingSessionProvider>
                   <WidgetProvider>
+                    <ViewportGuard />
                     <CookingNotificationRouter />
                     <AppAccessGate />
                     <AppLaunchAnimation />

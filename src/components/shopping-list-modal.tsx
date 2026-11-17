@@ -1,8 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { KeyboardAware } from '@/components/keyboard-aware';
 import { Colors } from '@/constants/theme';
 import { useKitchen } from '@/context/kitchen-context';
 import { useLanguage } from '@/context/language-context';
@@ -130,7 +129,7 @@ export function ShoppingListModal({ visible, onClose, onTransfer }: ShoppingList
 
   return (
     <Modal visible={visible} animationType="fade" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.page}>
+      <KeyboardAware style={styles.page}>
         <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
           <Pressable accessibilityRole="button" accessibilityLabel={text('关闭购物清单', 'Close shopping list')} onPress={onClose} style={styles.closeButton}>
             <Text style={styles.closeButtonText}>×</Text>
@@ -216,7 +215,7 @@ export function ShoppingListModal({ visible, onClose, onTransfer }: ShoppingList
             </>
           ) : null}
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAware>
     </Modal>
   );
 }

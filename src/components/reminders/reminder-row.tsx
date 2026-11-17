@@ -18,9 +18,12 @@ type Props = {
   onToggle: () => void;
   onOpen: () => void;
   onNudge: () => void;
+  /** 这一天某个子任务是否已勾选 */
+  isSubtaskDone?: (subtaskId: string) => boolean;
+  onToggleSubtask?: (subtaskId: string, done: boolean) => void;
 };
 
-export function ReminderRow({ reminder, done, doneBy, overdueLabel, canNudge, nudged, onToggle, onOpen, onNudge }: Props) {
+export function ReminderRow({ reminder, done, doneBy, overdueLabel, canNudge, nudged, onToggle, onOpen, onNudge, isSubtaskDone, onToggleSubtask }: Props) {
   const check = useSharedValue(done ? 1 : 0);
   const bell = useSharedValue(0);
 
@@ -36,9 +39,12 @@ export function ReminderRow({ reminder, done, doneBy, overdueLabel, canNudge, nu
 
   const assignee = reminder.assignee === 'both' ? null : findKitchenMember(reminder.assignee);
   const doer = doneBy ? findKitchenMember(doneBy) : null;
+  const subtasks = reminder.subtasks ?? [];
+  const subtasksDone = subtasks.filter((s) => isSubtaskDone?.(s.id)).length;
 
   return (
-    <View style={[styles.row, done && styles.rowDone]}>
+    <View style={[styles.wrap, done && styles.rowDone]}>
+    <View style={styles.row}>
       <Pressable
         accessibilityRole="checkbox"
         accessibilityState={{ checked: done }}
@@ -64,6 +70,12 @@ export function ReminderRow({ reminder, done, doneBy, overdueLabel, canNudge, nu
             <View style={styles.metaItem}>
               <Ionicons name="time-outline" size={13} color={Colors.light.textSecondary} />
               <Text style={styles.metaText}>{reminder.dueTime}</Text>
+            </View>
+          ) : null}
+          {subtasks.length > 0 ? (
+            <View style={styles.metaItem}>
+              <Ionicons name="checkbox-outline" size={13} color={Colors.light.textSecondary} />
+              <Text style={styles.metaText}>{`${subtasksDone}/${subtasks.length}`}</Text>
             </View>
           ) : null}
           {reminder.repeat !== 'none' ? (
@@ -96,11 +108,40 @@ export function ReminderRow({ reminder, done, doneBy, overdueLabel, canNudge, nu
         </Pressable>
       ) : null}
     </View>
+      {subtasks.length > 0 ? (
+        <View style={styles.subtasks}>
+          {subtasks.map((subtask) => {
+            const checked = done || Boolean(isSubtaskDone?.(subtask.id));
+            return (
+              <Pressable
+                key={subtask.id}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked, disabled: done }}
+                accessibilityLabel={`子任务：${subtask.title}`}
+                disabled={done || !onToggleSubtask}
+                onPress={() => onToggleSubtask?.(subtask.id, !checked)}
+                style={({ pressed }) => [styles.subtask, pressed && styles.pressed]}>
+                <View style={[styles.subtaskBox, checked && styles.subtaskBoxOn]}>
+                  {checked ? <Ionicons name="checkmark" size={13} color="#FFFFFF" /> : null}
+                </View>
+                <Text style={[styles.subtaskText, checked && styles.titleDone]} numberOfLines={2}>{subtask.title}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 10, paddingLeft: 6, paddingRight: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border, backgroundColor: Colors.light.surface },
+  wrap: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border, backgroundColor: Colors.light.surface },
+  row: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 10, paddingLeft: 6, paddingRight: 12 },
+  subtasks: { gap: 2, marginTop: -4, paddingBottom: 10, paddingLeft: 54, paddingRight: 12 },
+  subtask: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  subtaskBox: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center', borderRadius: 6, borderWidth: 1.5, borderColor: '#BFC5BD' },
+  subtaskBoxOn: { borderColor: '#5E9A6F', backgroundColor: '#5E9A6F' },
+  subtaskText: { flex: 1, color: Colors.light.text, fontSize: 15 },
   rowDone: { backgroundColor: '#FAFBF8' },
   checkHit: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   checkCircle: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 2, borderColor: '#BFC5BD', backgroundColor: Colors.light.surface },

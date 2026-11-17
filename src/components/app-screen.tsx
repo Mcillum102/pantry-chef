@@ -1,4 +1,4 @@
-import { Children, useCallback, type PropsWithChildren, type ReactNode } from 'react';
+import { Children, useCallback, useEffect, type PropsWithChildren, type ReactNode } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -7,6 +7,7 @@ import Animated, {
   Extrapolation,
   interpolate,
   ReduceMotion,
+  useAnimatedRef,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
@@ -23,6 +24,10 @@ type AppScreenProps = PropsWithChildren<{
   title: ReactNode;
   subtitle?: string;
   action?: ReactNode;
+  /** 页面底部额外留白（比如首页底部有输入栏） */
+  bottomSpace?: number;
+  /** 这个值变化时滚到最底部（比如发出一条消息后） */
+  scrollToEndKey?: number;
 }>;
 
 function AnimatedScreenSection({
@@ -47,8 +52,15 @@ function AnimatedScreenSection({
   return <Animated.View style={[styles.animatedSection, animatedStyle]}>{children}</Animated.View>;
 }
 
-export function AppScreen({ eyebrow, title, subtitle, action, children }: AppScreenProps) {
+export function AppScreen({ eyebrow, title, subtitle, action, bottomSpace = 0, scrollToEndKey, children }: AppScreenProps) {
   const insets = useSafeAreaInsets();
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+
+  useEffect(() => {
+    if (!scrollToEndKey) return;
+    const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+    return () => clearTimeout(timer);
+  }, [scrollRef, scrollToEndKey]);
   const entranceProgress = useSharedValue(0);
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((event) => {
@@ -98,6 +110,8 @@ export function AppScreen({ eyebrow, title, subtitle, action, children }: AppScr
     <View style={styles.screen}>
       <AuroraBackdrop scrollY={scrollY} />
       <Animated.ScrollView
+        ref={scrollRef}
+        keyboardShouldPersistTaps="handled"
         style={styles.scrollView}
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -107,7 +121,7 @@ export function AppScreen({ eyebrow, title, subtitle, action, children }: AppScr
           styles.content,
           {
             paddingTop: Platform.OS === 'android' ? insets.top + Spacing.three : Spacing.three,
-            paddingBottom: insets.bottom + 120,
+            paddingBottom: insets.bottom + 120 + bottomSpace,
           },
         ]}>
         <View nativeID="app-screen-content" style={styles.inner}>

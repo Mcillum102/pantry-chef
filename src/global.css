@@ -16,6 +16,8 @@ body,
 
 body {
   overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -63,4 +65,14 @@ body {
 #root input:focus,
 #root textarea:focus {
   outline: none;
+}
+
+/* iPhone：输入框字号小于 16px 时 Safari 会自动放大页面，收起键盘后也不缩回，导致页面和屏幕对不上。 */
+@supports (-webkit-touch-callout: none) {
+  #root input,
+  #root textarea,
+  body input,
+  body textarea {
+    font-size: max(16px, 1em) !important;
+  }
 }

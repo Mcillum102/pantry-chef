@@ -5,11 +5,18 @@ export type MemberId = 'a' | 'b';
 export type ReminderRepeat = 'none' | 'daily' | 'weekly' | 'monthly';
 export type ReminderAssignee = MemberId | 'both';
 
+/** 子任务：属于某条提醒的小步骤。重复提醒每一天的勾选状态分开记录。 */
+export type Subtask = {
+  id: string;
+  title: string;
+};
+
 export type Reminder = {
   id: string;
   title: string;
   emoji: string;
   notes: string;
+  subtasks: Subtask[];
   dueDate: string;
   dueTime: string | null;
   repeat: ReminderRepeat;
@@ -22,6 +29,13 @@ export type ReminderCompletion = {
   occurrenceDate: string;
   doneBy: MemberId;
   doneAt: string;
+};
+
+export type SubtaskCheck = {
+  reminderId: string;
+  subtaskId: string;
+  occurrenceDate: string;
+  doneBy: MemberId;
 };
 
 export type Nudge = {
@@ -148,4 +162,34 @@ export function timeAgo(iso: string, now = Date.now()) {
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours} 小时前`;
   return `${Math.round(hours / 24)} 天前`;
+}
+
+/** 首页最多显示多少条消息 */
+export const MESSAGE_LIMIT = 20;
+
+/** 最新的 limit 条消息，按时间从旧到新排（像聊天一样，新的在下面） */
+export function recentMessages<T extends { createdAt: string }>(messages: readonly T[], limit = MESSAGE_LIMIT): T[] {
+  return [...messages]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, limit)
+    .reverse();
+}
+
+export function isSubtaskDone(checks: readonly SubtaskCheck[], reminderId: string, subtaskId: string, dateKey: string) {
+  return checks.some((c) => c.reminderId === reminderId && c.subtaskId === subtaskId && c.occurrenceDate === dateKey);
+}
+
+/** 某一天这条提醒的子任务完成了几个（只数现在还存在的子任务） */
+export function subtaskProgress(reminder: Pick<Reminder, 'id' | 'subtasks'>, checks: readonly SubtaskCheck[], dateKey: string) {
+  const subtasks = reminder.subtasks ?? [];
+  const done = subtasks.filter((s) => isSubtaskDone(checks, reminder.id, s.id, dateKey)).length;
+  return { done, total: subtasks.length };
+}
+
+/** 清理子任务输入：去空白、去空行、最多 20 个、每个最多 80 字 */
+export function cleanSubtasks(subtasks: readonly Subtask[]): Subtask[] {
+  return subtasks
+    .map((s) => ({ id: s.id, title: s.title.trim().slice(0, 80) }))
+    .filter((s) => s.title.length > 0)
+    .slice(0, 20);
 }

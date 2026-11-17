@@ -6,19 +6,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppScreen, SectionHeader } from '@/components/app-screen';
 import { CountUp } from '@/components/count-up';
 import { GradientSurface } from '@/components/gradient-surface';
-import { NudgeComposer } from '@/components/reminders/nudge-composer';
+import { CHAT_COMPOSER_SPACE, ChatComposer } from '@/components/reminders/chat-composer';
 import { ReminderCalendar } from '@/components/reminders/reminder-calendar';
-import { ReminderEditor, type ReminderDraft } from '@/components/reminders/reminder-editor';
+import { blankReminderDraft, ReminderEditor, type ReminderDraft } from '@/components/reminders/reminder-editor';
 import { ReminderRow } from '@/components/reminders/reminder-row';
 import { findKitchenMember, KITCHEN_MEMBERS } from '@/constants/members';
-import { Colors, DisplayText, HeaderButton, Shadows } from '@/constants/theme';
+import { Colors, DisplayText, Shadows } from '@/constants/theme';
 import { useTasks } from '@/context/tasks-context';
 import {
   dayLabel,
   isAssignedTo,
   isDone,
+  isSubtaskDone,
   otherMember,
   overdueOccurrences,
+  recentMessages,
   remindersOn,
   timeAgo,
   toDateKey,
@@ -30,13 +32,16 @@ type Filter = 'all' | 'mine' | 'theirs';
 /** 默认首页：日历 + 提醒清单，两人共用；发现对方有事没做可以「催一下」 */
 export default function RemindersScreen() {
   const insets = useSafeAreaInsets();
-  const { reminders, completions, nudges, status, me, saveReminder, deleteReminder, setDone, sendNudge } = useTasks();
+  const {
+    reminders, completions, nudges, subtaskChecks, status, subtasksReady, me,
+    saveReminder, deleteReminder, setDone, setSubtaskDone, sendNudge,
+  } = useTasks();
   const today = toDateKey(new Date());
   const [selected, setSelected] = useState(today);
   const [filter, setFilter] = useState<Filter>('all');
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<ReminderDraft | null>(null);
-  const [composerOpen, setComposerOpen] = useState(false);
+  const [scrollToEndKey, setScrollToEndKey] = useState(0);
   const [nudged, setNudged] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -60,11 +65,22 @@ export default function RemindersScreen() {
   const todayList = remindersOn(reminders, today);
   const remainingToday = todayList.filter((r) => !isDone(completions, r.id, today));
   const remainingFor = (member: 'a' | 'b') => remainingToday.filter((r) => isAssignedTo(r, member)).length;
-  const recentNudges = useMemo(() => nudges.slice(0, 4), [nudges]);
+  const messages = useMemo(() => recentMessages(nudges), [nudges]);
 
-  function openNew() {
-    setEditing({ title: '', emoji: '📌', notes: '', dueDate: selected, dueTime: null, repeat: 'none', assignee: filter === 'theirs' ? otherMember(me) : 'both' });
+  function openNew(title = '') {
+    setEditing(blankReminderDraft(selected, filter === 'theirs' ? otherMember(me) : 'both', title));
     setEditorOpen(true);
+  }
+
+  async function sendMessage(message: string) {
+    try {
+      await sendNudge(message);
+      setScrollToEndKey((key) => key + 1);
+      return true;
+    } catch {
+      setToast('没发出去，请检查网络后再试');
+      return false;
+    }
   }
 
   function openEdit(reminder: Reminder) {
@@ -76,10 +92,17 @@ export default function RemindersScreen() {
     try {
       await action();
       if (success) setToast(success);
-    } catch {
-      setToast('没同步成功，请检查网络后再试');
+    } catch (error) {
+      setToast(error instanceof Error && error.message === 'subtasks-not-installed'
+        ? '子任务需要先升级数据库'
+        : '没同步成功，请检查网络后再试');
     }
   }
+
+  const subtaskProps = (reminder: Reminder, date: string) => ({
+    isSubtaskDone: (subtaskId: string) => isSubtaskDone(subtaskChecks, reminder.id, subtaskId, date),
+    onToggleSubtask: (subtaskId: string, done: boolean) => void run(() => setSubtaskDone(reminder, subtaskId, date, done)),
+  });
 
   function nudge(reminder: Reminder) {
     setNudged((current) => [...current, reminder.id]);
@@ -95,29 +118,21 @@ export default function RemindersScreen() {
         eyebrow={dayLabel(today, today) + ' · ' + new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' }).format(new Date())}
         title="提醒"
         subtitle={`${meMember?.name ?? ''}和${other?.name ?? ''}的日常小事，一起记、一起做。`}
-        action={
-          <>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`给${other?.name ?? '对方'}发消息`}
-              onPress={() => setComposerOpen(true)}
-              style={({ pressed }) => [styles.headerButton, styles.headerSecondary, pressed && styles.pressed]}>
-              <Ionicons name="chatbubble-ellipses-outline" size={21} color={Colors.light.primary} />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="新提醒"
-              onPress={openNew}
-              style={({ pressed }) => [styles.headerButton, styles.headerPrimary, pressed && styles.pressed]}>
-              <Ionicons name="add" size={26} color="#FFFFFF" />
-            </Pressable>
-          </>
-        }>
+        bottomSpace={CHAT_COMPOSER_SPACE}
+        scrollToEndKey={scrollToEndKey}>
         {status === 'needs-setup' ? (
           <View style={styles.setupCard}>
             <Text style={styles.setupTitle}>🛠️ 还差一步：升级数据库</Text>
             <Text style={styles.setupText}>
               提醒需要在 Supabase 里执行一次 supabase/migrations/20261115000000_reminders_and_nudges.sql，执行后两台手机就能同步提醒和互相「催一下」。
+            </Text>
+          </View>
+        ) : null}
+        {status !== 'needs-setup' && !subtasksReady ? (
+          <View style={styles.setupCard}>
+            <Text style={styles.setupTitle}>🛠️ 子任务需要升级数据库</Text>
+            <Text style={styles.setupText}>
+              在 Supabase 里执行一次 supabase/migrations/20261116000000_reminder_subtasks.sql 后，就能给提醒添加子任务。其他功能不受影响。
             </Text>
           </View>
         ) : null}
@@ -170,6 +185,7 @@ export default function RemindersScreen() {
                   onToggle={() => void run(() => setDone(reminder, date, true))}
                   onOpen={() => openEdit(reminder)}
                   onNudge={() => nudge(reminder)}
+                  {...subtaskProps(reminder, date)}
                 />
               ))}
             </View>
@@ -197,6 +213,7 @@ export default function RemindersScreen() {
                       onToggle={() => void run(() => setDone(reminder, selected, !done))}
                       onOpen={() => openEdit(reminder)}
                       onNudge={() => nudge(reminder)}
+                      {...subtaskProps(reminder, selected)}
                     />
                   );
                 })}
@@ -206,8 +223,8 @@ export default function RemindersScreen() {
             <View style={styles.empty}>
               <Text style={styles.emptyEmoji}>🗓️</Text>
               <Text style={styles.emptyTitle}>这天还没有安排</Text>
-              <Text style={styles.emptyText}>倒垃圾、交房租、给猫换水……记下来，到时候一起提醒。</Text>
-              <Pressable accessibilityRole="button" onPress={openNew} style={({ pressed }) => [styles.emptyButton, pressed && styles.pressed]}>
+              <Text style={styles.emptyText}>在下面的输入框写一句，点 ⏰ 就能记成提醒。</Text>
+              <Pressable accessibilityRole="button" onPress={() => openNew()} style={({ pressed }) => [styles.emptyButton, pressed && styles.pressed]}>
                 <Ionicons name="add" size={18} color={Colors.light.primary} />
                 <Text style={styles.emptyButtonText}>添加提醒</Text>
               </Pressable>
@@ -215,11 +232,11 @@ export default function RemindersScreen() {
           )}
         </View>
 
-        {recentNudges.length > 0 ? (
-          <View style={styles.section}>
-            <SectionHeader title="最近的消息" />
+        <View style={styles.section}>
+          <SectionHeader title="消息" detail={messages.length ? `最近 ${messages.length} 条` : undefined} />
+          {messages.length > 0 ? (
             <View style={styles.messages}>
-              {recentNudges.map((n) => {
+              {messages.map((n) => {
                 const mine = n.fromMember === me;
                 const from = findKitchenMember(n.fromMember);
                 return (
@@ -227,13 +244,26 @@ export default function RemindersScreen() {
                     <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}>
                       <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>{n.message}</Text>
                     </View>
-                    <Text style={styles.bubbleMeta}>{`${mine ? '我' : from?.name ?? ''} · ${timeAgo(n.createdAt)}${mine ? (n.readAt ? ' · 已读' : ' · 未读') : ''}`}</Text>
+                    <View style={[styles.bubbleMetaRow, mine && styles.bubbleMetaRowMine]}>
+                      <Text style={styles.bubbleMeta}>{`${mine ? '我' : from?.name ?? ''} · ${timeAgo(n.createdAt)}${mine ? (n.readAt ? ' · 已读' : ' · 未读') : ''}`}</Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`把「${n.message}」设为提醒`}
+                        hitSlop={8}
+                        onPress={() => openNew(n.message.slice(0, 80))}
+                        style={({ pressed }) => [styles.makeReminder, pressed && styles.pressed]}>
+                        <Ionicons name="alarm-outline" size={13} color={Colors.light.primary} />
+                        <Text style={styles.makeReminderText}>设为提醒</Text>
+                      </Pressable>
+                    </View>
                   </View>
                 );
               })}
             </View>
-          </View>
-        ) : null}
+          ) : (
+            <Text style={styles.messagesEmpty}>{`在下面输入，发给${other?.name ?? '对方'}；对方手机会马上收到。`}</Text>
+          )}
+        </View>
       </AppScreen>
 
       <ReminderEditor
@@ -241,6 +271,7 @@ export default function RemindersScreen() {
         initial={editing}
         today={today}
         defaultAssignee="both"
+        subtasksEnabled={subtasksReady}
         onClose={() => setEditorOpen(false)}
         onSave={(draft) => {
           setEditorOpen(false);
@@ -253,18 +284,16 @@ export default function RemindersScreen() {
         }}
       />
 
-      <NudgeComposer
-        visible={composerOpen}
-        to={other}
-        onClose={() => setComposerOpen(false)}
-        onSend={async (message) => {
-          await sendNudge(message);
-          setToast(`已发给${other?.name ?? '对方'}`);
-        }}
-      />
+      {!editorOpen ? (
+        <ChatComposer
+          placeholder={`发消息给${other?.name ?? '对方'}…`}
+          onSend={sendMessage}
+          onMakeReminder={(text) => openNew(text.slice(0, 80))}
+        />
+      ) : null}
 
       {toast ? (
-        <View pointerEvents="none" style={[styles.toast, { bottom: Math.max(insets.bottom, 8) + 92 }]}>
+        <View pointerEvents="none" style={[styles.toast, { top: Math.max(insets.top, 10) + 10 }]}>
           <Text style={styles.toastText}>{toast}</Text>
         </View>
       ) : null}
@@ -273,9 +302,6 @@ export default function RemindersScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerButton: { ...HeaderButton.base },
-  headerPrimary: { ...HeaderButton.primary },
-  headerSecondary: { ...HeaderButton.secondary },
   pressed: { opacity: 0.8, transform: [{ scale: 0.97 }] },
   setupCard: { gap: 6, padding: 16, borderRadius: 22, backgroundColor: '#FFF6E6', borderWidth: 1, borderColor: '#F1DDB5' },
   setupTitle: { color: Colors.light.text, fontSize: 15, fontWeight: '600' },
@@ -315,6 +341,11 @@ const styles = StyleSheet.create({
   bubbleText: { color: Colors.light.text, fontSize: 15, lineHeight: 21 },
   bubbleTextMine: { color: '#FFFFFF' },
   bubbleMeta: { color: Colors.light.textSecondary, fontSize: 12 },
+  bubbleMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  bubbleMetaRowMine: { flexDirection: 'row-reverse' },
+  makeReminder: { minHeight: 24, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  makeReminderText: { color: Colors.light.primary, fontSize: 12, fontWeight: '600' },
+  messagesEmpty: { color: Colors.light.textSecondary, fontSize: 14, lineHeight: 20 },
   toast: { position: 'absolute', alignSelf: 'center', paddingHorizontal: 18, paddingVertical: 12, borderRadius: 18, backgroundColor: '#1E2420', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.22)' },
   toastText: { color: '#FFFFFF', fontSize: 14, fontWeight: '500' },
 });

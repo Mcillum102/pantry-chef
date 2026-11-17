@@ -4,7 +4,6 @@ import { useLocalSearchParams } from 'expo-router';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import {
   Image,
-  KeyboardAvoidingView,
   Modal,
   PanResponder,
   Platform,
@@ -28,6 +27,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { KeyboardAware } from '@/components/keyboard-aware';
+import { MoreOptions } from '@/components/more-options';
 import { AppScreen, SectionHeader } from '@/components/app-screen';
 import { RecipeCompletionCelebration } from '@/components/recipe-completion-celebration';
 import { RecipeShelfCelebration } from '@/components/recipe-shelf-celebration';
@@ -1423,7 +1424,7 @@ export default function RecipesScreen() {
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => setRecipeImportMode(null)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.formPage}>
+        <KeyboardAware style={styles.formPage}>
           <View style={[styles.formHeader, { paddingTop: Math.max(insets.top, 12) }]}>
             <Pressable accessibilityRole="button" onPress={() => setRecipeImportMode(null)} style={styles.formHeaderSide}>
               <Text style={styles.formCancelText}>{text('取消', 'Cancel')}</Text>
@@ -1509,7 +1510,7 @@ export default function RecipesScreen() {
               </Text>
             </Pressable>
           </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAware>
       </Modal>
 
       <Modal
@@ -2128,9 +2129,7 @@ export default function RecipesScreen() {
         animationType="fade"
         presentationStyle="fullScreen"
         onRequestClose={() => setIsRecipeFormOpen(false)}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.formPage}>
+        <KeyboardAware style={styles.formPage}>
           <View style={[styles.formHeader, { paddingTop: Math.max(insets.top, 12) }]}>
             <Pressable
               accessibilityRole="button"
@@ -2160,26 +2159,8 @@ export default function RecipesScreen() {
               styles.formContent,
               { paddingBottom: Math.max(insets.bottom, 20) + 36 },
             ]}>
-            <View style={styles.formIntro}>
-              <Text style={styles.formIntroEmoji}>{draftEmoji}</Text>
-              <View style={styles.formIntroCopy}>
-                <Text style={styles.formIntroTitle}>
-                  {text('记录你的拿手菜', 'Save your signature dish')}
-                </Text>
-                <Text style={styles.formIntroText}>
-                  {text(
-                    '填写菜名、食材和步骤后，AI 会自动识别分类并放进合适的菜谱库。',
-                    'After you enter the recipe, AI will choose the right collection automatically.'
-                  )}
-                </Text>
-              </View>
-            </View>
-
             <View style={styles.formSection}>
-              <Text style={styles.formSectionTitle}>{text('基本信息', 'Basics')}</Text>
-              <Text style={styles.fieldLabel}>
-                {text('菜谱名称 *', 'Recipe name *')}
-              </Text>
+              <Text style={styles.fieldLabel}>{text('菜名', 'Recipe name')}</Text>
               <TextInput
                 value={draftName}
                 onChangeText={setDraftName}
@@ -2189,95 +2170,6 @@ export default function RecipesScreen() {
                 maxLength={50}
               />
 
-              <Text style={styles.fieldLabel}>{text('选择 Emoji', 'Choose an emoji')}</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.emojiPicker}>
-                {recipeEmojis.map((emoji) => (
-                  <Pressable
-                    key={emoji}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: draftEmoji === emoji }}
-                    onPress={() => setDraftEmoji(emoji)}
-                    style={[styles.emojiOption, draftEmoji === emoji && styles.emojiOptionSelected]}>
-                    <Text style={styles.emojiOptionText}>{emoji}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-
-              <Text style={styles.fieldLabel}>{text('简介', 'Description')}</Text>
-              <TextInput
-                value={draftDescription}
-                onChangeText={setDraftDescription}
-                placeholder={text('写一点味道、来源或适合的场景', 'Describe the flavor, origin, or occasion')}
-                placeholderTextColor={Colors.light.textSecondary}
-                style={[styles.formInput, styles.multilineInput]}
-                multiline
-                maxLength={160}
-              />
-
-              <View style={styles.aiFormHint}>
-                <Text style={styles.aiFormHintIcon}>✦</Text>
-                <View style={styles.aiFormHintCopy}>
-                  <Text style={styles.aiFormHintTitle}>{text('AI 自动分库', 'AI auto-organization')}</Text>
-                  <Text style={styles.aiFormHintText}>
-                    {text('无需选择分类或标签；保存时会自动放入快手菜、一锅料理、下饭菜、面食、其他或烘焙谱。', 'No manual category or tags needed. AI will choose the best collection when you save.')}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.compactFieldsRow}>
-                <View style={styles.compactField}>
-                  <Text style={styles.fieldLabel}>{text('份数 *', 'Servings *')}</Text>
-                  <TextInput
-                    value={draftServings}
-                    onChangeText={setDraftServings}
-                    keyboardType="number-pad"
-                    inputMode="numeric"
-                    placeholder="2"
-                    placeholderTextColor={Colors.light.textSecondary}
-                    style={styles.formInput}
-                  />
-                </View>
-                <View style={styles.compactField}>
-                  <Text style={styles.fieldLabel}>{text('用时/分钟 *', 'Minutes *')}</Text>
-                  <TextInput
-                    value={draftTime}
-                    onChangeText={setDraftTime}
-                    keyboardType="number-pad"
-                    inputMode="numeric"
-                    placeholder="20"
-                    placeholderTextColor={Colors.light.textSecondary}
-                    style={styles.formInput}
-                  />
-                </View>
-                <View style={styles.compactField}>
-                  <Text style={styles.fieldLabel}>{text('碳水/份', 'Carbs/serving')}</Text>
-                  <TextInput
-                    value={draftCarbs}
-                    onChangeText={setDraftCarbs}
-                    keyboardType="decimal-pad"
-                    inputMode="decimal"
-                    placeholder="0"
-                    placeholderTextColor={Colors.light.textSecondary}
-                    style={styles.formInput}
-                  />
-                </View>
-              </View>
-
-              <Text style={styles.fieldLabel}>{text('难度', 'Difficulty')}</Text>
-              <View style={styles.choiceWrap}>
-                {(['简单', '适中'] as const).map((item) => (
-                  <Pressable
-                    key={item}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: draftDifficulty === item }}
-                    onPress={() => setDraftDifficulty(item)}
-                    style={[styles.choiceChip, draftDifficulty === item && styles.choiceChipSelected]}>
-                    <Text style={[styles.choiceChipText, draftDifficulty === item && styles.choiceChipTextSelected]}>
-                      {localizeContent(item, language)}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
             </View>
 
             <View style={styles.formSection}>
@@ -2285,7 +2177,7 @@ export default function RecipesScreen() {
                 <View>
                   <Text style={styles.formSectionTitle}>{text('所需食材 *', 'Ingredients *')}</Text>
                   <Text style={styles.formSectionHint}>
-                    {text('按当前菜谱份数填写', 'Enter amounts for the recipe servings above')}
+                    {text(`按 ${draftServings || '2'} 人份填写`, `Amounts for ${draftServings || '2'} servings`)}
                   </Text>
                 </View>
                 <Text style={styles.ingredientCount}>
@@ -2482,6 +2374,93 @@ export default function RecipesScreen() {
               </Pressable>
             </View>
 
+            <View style={styles.formSection}>
+              <MoreOptions
+                label={text('更多选项', 'More options')}
+                summary={text(`${draftServings || '–'} 人份 · ${draftTime || '–'} 分钟`, `${draftServings || '–'} servings · ${draftTime || '–'} min`)}
+                forceOpen={!(Number(draftServings) > 0 && Number(draftTime) > 0)}>
+              <Text style={styles.fieldLabel}>{text('选择 Emoji', 'Choose an emoji')}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.emojiPicker}>
+                {recipeEmojis.map((emoji) => (
+                  <Pressable
+                    key={emoji}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: draftEmoji === emoji }}
+                    onPress={() => setDraftEmoji(emoji)}
+                    style={[styles.emojiOption, draftEmoji === emoji && styles.emojiOptionSelected]}>
+                    <Text style={styles.emojiOptionText}>{emoji}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              <Text style={styles.fieldLabel}>{text('简介', 'Description')}</Text>
+              <TextInput
+                value={draftDescription}
+                onChangeText={setDraftDescription}
+                placeholder={text('写一点味道、来源或适合的场景', 'Describe the flavor, origin, or occasion')}
+                placeholderTextColor={Colors.light.textSecondary}
+                style={[styles.formInput, styles.multilineInput]}
+                multiline
+                maxLength={160}
+              />
+
+              <View style={styles.compactFieldsRow}>
+                <View style={styles.compactField}>
+                  <Text style={styles.fieldLabel}>{text('份数 *', 'Servings *')}</Text>
+                  <TextInput
+                    value={draftServings}
+                    onChangeText={setDraftServings}
+                    keyboardType="number-pad"
+                    inputMode="numeric"
+                    placeholder="2"
+                    placeholderTextColor={Colors.light.textSecondary}
+                    style={styles.formInput}
+                  />
+                </View>
+                <View style={styles.compactField}>
+                  <Text style={styles.fieldLabel}>{text('用时/分钟 *', 'Minutes *')}</Text>
+                  <TextInput
+                    value={draftTime}
+                    onChangeText={setDraftTime}
+                    keyboardType="number-pad"
+                    inputMode="numeric"
+                    placeholder="20"
+                    placeholderTextColor={Colors.light.textSecondary}
+                    style={styles.formInput}
+                  />
+                </View>
+                <View style={styles.compactField}>
+                  <Text style={styles.fieldLabel}>{text('碳水/份', 'Carbs/serving')}</Text>
+                  <TextInput
+                    value={draftCarbs}
+                    onChangeText={setDraftCarbs}
+                    keyboardType="decimal-pad"
+                    inputMode="decimal"
+                    placeholder="0"
+                    placeholderTextColor={Colors.light.textSecondary}
+                    style={styles.formInput}
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.fieldLabel}>{text('难度', 'Difficulty')}</Text>
+              <View style={styles.choiceWrap}>
+                {(['简单', '适中'] as const).map((item) => (
+                  <Pressable
+                    key={item}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: draftDifficulty === item }}
+                    onPress={() => setDraftDifficulty(item)}
+                    style={[styles.choiceChip, draftDifficulty === item && styles.choiceChipSelected]}>
+                    <Text style={[styles.choiceChipText, draftDifficulty === item && styles.choiceChipTextSelected]}>
+                      {localizeContent(item, language)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              </MoreOptions>
+            </View>
+
             {!validDraftRecipe ? (
               <Text style={styles.validationHint}>
                 {text('请填写菜名、食材及至少一个完整步骤；计时时长需大于 0。', 'Add a name, ingredients, and at least one complete step. Timer durations must be greater than 0.')}
@@ -2498,7 +2477,7 @@ export default function RecipesScreen() {
               </Text>
             </Pressable>
           </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAware>
       </Modal>
 
       {recipeCelebration ? (
@@ -2871,11 +2850,6 @@ const styles = StyleSheet.create({
   formSaveText: { color: Colors.light.primary, fontSize: 14, fontWeight: '600', textAlign: 'right' },
   formSaveTextDisabled: { color: '#A7AAA5' },
   formContent: { width: '100%', maxWidth: 720, alignSelf: 'center', gap: 18, padding: 18 },
-  formIntro: { flexDirection: 'row', alignItems: 'center', gap: 15, padding: 17, borderRadius: 23, backgroundColor: Colors.light.primary },
-  formIntroEmoji: { width: 58, fontSize: 43, textAlign: 'center' },
-  formIntroCopy: { flex: 1, gap: 5 },
-  formIntroTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
-  formIntroText: { color: '#DDEDE3', fontSize: 12, lineHeight: 17, fontWeight: '500' },
   formSection: { gap: 11, padding: 17, borderRadius: 23, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   formSectionTitle: { color: Colors.light.text, fontSize: 17, fontWeight: '600' },
   formSectionHint: { color: Colors.light.textSecondary, fontSize: 12, lineHeight: 16, marginTop: 3 },
@@ -2888,11 +2862,6 @@ const styles = StyleSheet.create({
   emojiOption: { width: 47, height: 47, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: Colors.light.backgroundElement, borderWidth: 1, borderColor: 'transparent' },
   emojiOptionSelected: { backgroundColor: Colors.light.primarySoft, borderColor: Colors.light.primary },
   emojiOptionText: { fontSize: 25 },
-  aiFormHint: { minHeight: 72, flexDirection: 'row', alignItems: 'flex-start', gap: 11, padding: 13, borderRadius: 17, backgroundColor: '#F0EBFF', borderWidth: 1, borderColor: '#D7CBF2' },
-  aiFormHintIcon: { width: 30, height: 30, overflow: 'hidden', textAlign: 'center', lineHeight: 30, borderRadius: 15, color: '#FFFFFF', backgroundColor: '#735C9B', fontSize: 15, fontWeight: '600' },
-  aiFormHintCopy: { flex: 1, gap: 4 },
-  aiFormHintTitle: { color: '#59417F', fontSize: 12, fontWeight: '600' },
-  aiFormHintText: { color: '#745F93', fontSize: 12, lineHeight: 16, fontWeight: '500' },
   choiceWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   choiceChip: { minHeight: 38, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 13, backgroundColor: Colors.light.backgroundElement, borderWidth: 1, borderColor: 'transparent' },
   choiceChipSelected: { backgroundColor: Colors.light.primarySoft, borderColor: Colors.light.primary },
