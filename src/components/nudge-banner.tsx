@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { ReduceMotion, SlideInUp, SlideOutUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,30 +11,13 @@ import { timeAgo } from '@/data/reminders';
 
 /**
  * 收到「催一下」时，在任何页面顶部滑下来的提示。
- * App 开着时实时出现；没开时下次打开会看到。
+ * App 开着时实时出现；App 没开时由推送通知（supabase/functions/push）提醒。
  */
 export function NudgeBanner() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { unreadForMe, markRead } = useTasks();
   const latest = unreadForMe[0];
-  const announcedRef = useRef<string | null>(null);
-
-  // 网页在后台且用户允许过通知时，额外弹一条系统通知（桌面浏览器支持；iPhone 主屏幕 App 需要以后接入推送）
-  useEffect(() => {
-    if (!latest || announcedRef.current === latest.id) return;
-    announcedRef.current = latest.id;
-    if (Platform.OS !== 'web' || typeof document === 'undefined' || !document.hidden) return;
-    const NotificationApi = (globalThis as { Notification?: typeof Notification }).Notification;
-    if (NotificationApi?.permission === 'granted') {
-      const from = findKitchenMember(latest.fromMember);
-      try {
-        new NotificationApi(`${from?.name ?? '对方'}提醒你`, { body: latest.message });
-      } catch {
-        // 某些浏览器不允许页面直接弹通知
-      }
-    }
-  }, [latest]);
 
   if (!latest) return null;
   const from = findKitchenMember(latest.fromMember);

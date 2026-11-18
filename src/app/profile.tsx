@@ -3,6 +3,7 @@ import { type Href, useRouter } from 'expo-router';
 import { Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AppScreen, SectionHeader } from '@/components/app-screen';
+import { PushNotificationsCard } from '@/components/push-notifications-card';
 import { Colors, Spacing } from '@/constants/theme';
 import { useCloudSync } from '@/context/cloud-sync-context';
 import { useHealth } from '@/context/health-context';
@@ -123,6 +124,8 @@ export default function ProfileScreen() {
         <Text style={styles.accountEntryBadge}>{text('管理', 'MANAGE')}</Text>
         <Text style={styles.accountEntryChevron}>›</Text>
       </Pressable>
+
+      <PushNotificationsCard />
 
       <View style={styles.section}>
         <SectionHeader
