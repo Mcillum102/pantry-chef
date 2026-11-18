@@ -1,7 +1,16 @@
 // 提醒 / 完成记录 / 「催一下」的 Supabase 读写。表结构见 supabase/migrations/20261115000000_reminders_and_nudges.sql
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
-import { MESSAGE_LIMIT, type MemberId, type Nudge, type Reminder, type ReminderCompletion, type Subtask, type SubtaskCheck } from '@/data/reminders';
+import {
+  MESSAGE_LIMIT,
+  withScheduleDefaults,
+  type MemberId,
+  type Nudge,
+  type Reminder,
+  type ReminderCompletion,
+  type Subtask,
+  type SubtaskCheck,
+} from '@/data/reminders';
 import { uniqueChannelName } from '@/data/realtime-utils';
 import { supabase } from '@/services/cloud-sync';
 
@@ -21,6 +30,18 @@ export class SubtasksNotInstalledError extends Error {
   constructor() {
     super('subtasks-not-installed');
   }
+}
+
+/** 日程的 migration（20261119000000_schedules.sql）还没执行：日程、每年 / 工作日重复、单独设置提醒暂时不能保存 */
+export class SchedulesNotInstalledError extends Error {
+  constructor() {
+    super('schedules-not-installed');
+  }
+}
+
+/** 某一列还不存在（对应的 migration 没执行） */
+function isMissingColumnError(error: { code?: string; message?: string } | null) {
+  return Boolean(error && (error.code === '42703' || /column .* does not exist/i.test(error.message ?? '')));
 }
 
 function isSubtaskSchemaError(error: { code?: string; message?: string } | null) {
@@ -43,6 +64,7 @@ function check(error: { code?: string; message?: string } | null) {
 type ReminderRow = {
   id: string; title: string; emoji: string; notes: string; due_date: string; due_time: string | null;
   repeat: Reminder['repeat']; assignee: Reminder['assignee']; created_by: MemberId; subtasks?: unknown;
+  kind?: string; remind_before?: number | null;
 };
 type SubtaskCheckRow = { reminder_id: string; subtask_id: string; occurrence_date: string; done_by: MemberId };
 
@@ -59,10 +81,10 @@ type NudgeRow = {
   message: string; created_at: string; read_at: string | null;
 };
 
-const toReminder = (row: ReminderRow): Reminder => ({
+const toReminder = (row: ReminderRow): Reminder => withScheduleDefaults({
   id: row.id, title: row.title, emoji: row.emoji, notes: row.notes, dueDate: row.due_date,
   dueTime: row.due_time, repeat: row.repeat, assignee: row.assignee, createdBy: row.created_by,
-  subtasks: parseSubtasks(row.subtasks),
+  subtasks: parseSubtasks(row.subtasks), kind: row.kind, remindBefore: row.remind_before,
 });
 const toSubtaskCheck = (row: SubtaskCheckRow): SubtaskCheck => ({
   reminderId: row.reminder_id, subtaskId: row.subtask_id, occurrenceDate: row.occurrence_date, doneBy: row.done_by,
@@ -77,24 +99,33 @@ const toNudge = (row: NudgeRow): Nudge => ({
 
 const REMINDER_COLUMNS = 'id,title,emoji,notes,due_date,due_time,repeat,assignee,created_by';
 
+/** 按数据库升级到哪一步，从新到旧依次尝试 */
+const REMINDER_SELECTS = [
+  { columns: `${REMINDER_COLUMNS},subtasks,kind,remind_before`, subtasks: true, schedules: true },
+  { columns: `${REMINDER_COLUMNS},subtasks`, subtasks: true, schedules: false },
+  { columns: REMINDER_COLUMNS, subtasks: false, schedules: false },
+] as const;
+
 export async function fetchRemindersData(householdId: string, sinceDate: string) {
   const db = client();
-  const [reminders, completions, nudges, checks] = await Promise.all([
-    db.from('reminders').select(`${REMINDER_COLUMNS},subtasks`).eq('household_id', householdId),
+  const [completions, nudges, checks] = await Promise.all([
     db.from('reminder_completions').select('reminder_id,occurrence_date,done_by,done_at').eq('household_id', householdId).gte('occurrence_date', sinceDate),
     db.from('nudges').select('id,reminder_id,from_member,to_member,message,created_at,read_at').eq('household_id', householdId).order('created_at', { ascending: false }).limit(MESSAGE_LIMIT),
     db.from('reminder_subtask_checks').select('reminder_id,subtask_id,occurrence_date,done_by').eq('household_id', householdId).gte('occurrence_date', sinceDate),
   ]);
 
-  // 子任务的 migration 还没执行：提醒照常加载，只是没有子任务
-  let reminderData: unknown[] | null = reminders.data;
-  let reminderError = reminders.error;
-  const subtasksReady = !isSubtaskSchemaError(reminders.error) && !isSubtaskSchemaError(checks.error);
-  if (isSubtaskSchemaError(reminders.error)) {
-    const fallback = await db.from('reminders').select(REMINDER_COLUMNS).eq('household_id', householdId);
-    reminderData = fallback.data;
-    reminderError = fallback.error;
+  // 子任务 / 日程的 migration 还没执行：提醒照常加载，只是没有新功能
+  let reminderData: unknown[] | null = null;
+  let reminderError: { code?: string; message?: string } | null = null;
+  let level: (typeof REMINDER_SELECTS)[number] = REMINDER_SELECTS[REMINDER_SELECTS.length - 1];
+  for (const attempt of REMINDER_SELECTS) {
+    const result = await db.from('reminders').select(attempt.columns).eq('household_id', householdId);
+    reminderData = result.data;
+    reminderError = result.error;
+    level = attempt;
+    if (!isMissingColumnError(result.error)) break;
   }
+  const subtasksReady = level.subtasks && !isSubtaskSchemaError(checks.error);
   check(reminderError);
   check(completions.error);
   check(nudges.error);
@@ -105,12 +136,18 @@ export async function fetchRemindersData(householdId: string, sinceDate: string)
     nudges: ((nudges.data ?? []) as NudgeRow[]).map(toNudge),
     subtaskChecks: subtasksReady ? ((checks.data ?? []) as SubtaskCheckRow[]).map(toSubtaskCheck) : [],
     subtasksReady,
+    schedulesReady: level.schedules,
   };
 }
 
-export async function saveReminderRow(householdId: string, reminder: Reminder, includeSubtasks: boolean) {
+export async function saveReminderRow(
+  householdId: string,
+  reminder: Reminder,
+  features: { subtasks: boolean; schedules: boolean }
+) {
   const { error } = await client().from('reminders').upsert({
-    ...(includeSubtasks ? { subtasks: reminder.subtasks } : {}),
+    ...(features.subtasks ? { subtasks: reminder.subtasks } : {}),
+    ...(features.schedules ? { kind: reminder.kind, remind_before: reminder.remindBefore } : {}),
     id: reminder.id,
     household_id: householdId,
     title: reminder.title.trim(),

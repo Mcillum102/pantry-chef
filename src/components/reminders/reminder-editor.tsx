@@ -6,37 +6,54 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GradientSurface } from '@/components/gradient-surface';
 import { KeyboardAware } from '@/components/keyboard-aware';
 import { MoreOptions } from '@/components/more-options';
+import { DatePicker } from '@/components/reminders/date-picker';
 import { KITCHEN_MEMBERS } from '@/constants/members';
 import { Colors, Shadows } from '@/constants/theme';
 import {
   addDays,
   cleanSubtasks,
   dayLabel,
+  defaultRemindBefore,
+  fitRemindBefore,
+  REMIND_OPTIONS_ALL_DAY,
+  REMIND_OPTIONS_TIMED,
+  remindLabel,
   REPEAT_LABELS,
   type Reminder,
   type ReminderAssignee,
+  type ReminderKind,
   type ReminderRepeat,
 } from '@/data/reminders';
 import { newId } from '@/services/reminders-api';
 
-const EMOJIS = ['📌', '🗑️', '🧺', '🛒', '🧹', '🍳', '💧', '🌿', '💊', '🐱', '📦', '💡'] as const;
-const TIMES = ['08:00', '12:00', '18:00', '21:00'] as const;
+const TASK_EMOJIS = ['📌', '🗑️', '🧺', '🛒', '🧹', '🍳', '💧', '🌿', '💊', '🐱', '📦', '💡'] as const;
+const EVENT_EMOJIS = ['📅', '🎤', '🎬', '🎂', '✈️', '🏥', '🍽️', '💼', '🎉', '⚽️', '💍', '🎫'] as const;
+const TASK_TIMES = ['08:00', '12:00', '18:00', '21:00'] as const;
+const EVENT_TIMES = ['10:00', '14:00', '19:00', '20:00'] as const;
+const ALL_TIMES: readonly string[] = [...TASK_TIMES, ...EVENT_TIMES];
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 const QUICK_DAYS = [['今天', 0], ['明天', 1], ['后天', 2]] as const;
 
 export type ReminderDraft = Omit<Reminder, 'id' | 'createdBy'> & { id?: string };
 
-export function blankReminderDraft(dueDate: string, assignee: ReminderAssignee, title = ''): ReminderDraft {
-  return { title, emoji: '📌', notes: '', subtasks: [], dueDate, dueTime: null, repeat: 'none', assignee };
+export function blankReminderDraft(dueDate: string, assignee: ReminderAssignee, title = '', kind: ReminderKind = 'task'): ReminderDraft {
+  return {
+    kind, title, emoji: kind === 'event' ? '📅' : '📌', notes: '', subtasks: [], dueDate, dueTime: null, repeat: 'none', assignee,
+    remindBefore: defaultRemindBefore(kind, null),
+  };
 }
 
-/** 新建 / 编辑提醒。只露出最常用的：做什么、子任务、哪天、谁做；其余放在「更多选项」里 */
+/**
+ * 新建 / 编辑提醒。顶部切换「待办 / 日程」：
+ * 待办只露出做什么、子任务、哪天、谁做；日程露出什么事、哪天、几点、要不要提醒。其余放在「更多选项」里。
+ */
 export function ReminderEditor({
   visible,
   initial,
   today,
   defaultAssignee,
   subtasksEnabled = true,
+  schedulesEnabled = true,
   onClose,
   onSave,
   onDelete,
@@ -47,6 +64,8 @@ export function ReminderEditor({
   defaultAssignee: ReminderAssignee;
   /** 云端还没升级数据库时，子任务暂时不能保存 */
   subtasksEnabled?: boolean;
+  /** 云端还没升级数据库时，日程和单独的提醒设置暂时不能保存 */
+  schedulesEnabled?: boolean;
   onClose: () => void;
   onSave: (draft: ReminderDraft) => void;
   onDelete?: (id: string) => void;
@@ -56,21 +75,46 @@ export function ReminderEditor({
   const [customTime, setCustomTime] = useState('');
   const [newSubtask, setNewSubtask] = useState('');
   const [pickingDate, setPickingDate] = useState(false);
+  // 用户自己选过「提醒」之后，改时间 / 改类型就不再自动换默认值
+  const [remindTouched, setRemindTouched] = useState(false);
   const subtaskInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (!visible) return;
     const next = initial ?? blankReminderDraft(today, defaultAssignee);
     setDraft({ ...next, subtasks: next.subtasks ?? [] });
-    setCustomTime(next.dueTime && !TIMES.includes(next.dueTime as (typeof TIMES)[number]) ? next.dueTime : '');
+    setCustomTime(next.dueTime && !ALL_TIMES.includes(next.dueTime) ? next.dueTime : '');
     setNewSubtask('');
+    setRemindTouched(Boolean(next.id));
     setPickingDate(!QUICK_DAYS.some(([, offset]) => addDays(today, offset) === next.dueDate));
   }, [defaultAssignee, initial, today, visible]);
 
   const editing = Boolean(draft.id);
+  const isEvent = draft.kind === 'event';
   const timeValid = !customTime || TIME_PATTERN.test(customTime);
   const canSave = draft.title.trim().length > 0 && timeValid;
   const update = (patch: Partial<ReminderDraft>) => setDraft((current) => ({ ...current, ...patch }));
+  const emojis: readonly string[] = isEvent ? EVENT_EMOJIS : TASK_EMOJIS;
+  const times = isEvent ? EVENT_TIMES : TASK_TIMES;
+  const remindOptions = draft.dueTime ? REMIND_OPTIONS_TIMED : REMIND_OPTIONS_ALL_DAY;
+
+  function setTime(dueTime: string | null) {
+    setDraft((current) => ({
+      ...current,
+      dueTime,
+      remindBefore: remindTouched ? fitRemindBefore(current.remindBefore, Boolean(dueTime)) : defaultRemindBefore(current.kind, dueTime),
+    }));
+  }
+
+  function setKind(kind: ReminderKind) {
+    setDraft((current) => ({
+      ...current,
+      kind,
+      // 还是默认图标时跟着换；用户自己选过的保留
+      emoji: current.emoji === '📌' || current.emoji === '📅' ? (kind === 'event' ? '📅' : '📌') : current.emoji,
+      remindBefore: remindTouched ? current.remindBefore : defaultRemindBefore(kind, current.dueTime),
+    }));
+  }
 
   function addSubtask() {
     const title = newSubtask.trim();
@@ -82,15 +126,60 @@ export function ReminderEditor({
 
   function save() {
     if (!canSave) return;
-    const pending = newSubtask.trim() ? [...draft.subtasks, { id: newId(), title: newSubtask.trim() }] : draft.subtasks;
-    onSave({ ...draft, title: draft.title.trim(), notes: draft.notes.trim(), subtasks: cleanSubtasks(pending) });
+    const pending = !isEvent && newSubtask.trim() ? [...draft.subtasks, { id: newId(), title: newSubtask.trim() }] : draft.subtasks;
+    onSave({ ...draft, title: draft.title.trim(), notes: draft.notes.trim(), subtasks: isEvent ? [] : cleanSubtasks(pending) });
   }
 
-  const moreSummary = [
-    draft.dueTime,
-    draft.repeat !== 'none' ? REPEAT_LABELS[draft.repeat] : null,
-    draft.notes.trim() ? '有备注' : null,
-  ].filter(Boolean).join(' · ') || '时间、重复、图标、备注';
+  const moreSummary = (isEvent
+    ? [draft.repeat !== 'none' ? REPEAT_LABELS[draft.repeat] : null, draft.notes.trim() ? '有备注' : null]
+    : [
+      draft.dueTime,
+      draft.repeat !== 'none' ? REPEAT_LABELS[draft.repeat] : null,
+      draft.remindBefore !== null ? `🔔 ${remindLabel(draft.remindBefore, Boolean(draft.dueTime))}` : null,
+      draft.notes.trim() ? '有备注' : null,
+    ]).filter(Boolean).join(' · ') || (isEvent ? '重复、图标、备注' : '时间、提醒、重复、图标、备注');
+
+  const timeField = (
+    <Field label="几点">
+      <View style={styles.chips}>
+        <Chip label={isEvent ? '全天' : '不定'} selected={!draft.dueTime} onPress={() => { setTime(null); setCustomTime(''); }} />
+        {times.map((time) => (
+          <Chip key={time} label={time} selected={draft.dueTime === time} onPress={() => { setTime(time); setCustomTime(''); }} />
+        ))}
+        <TextInput
+          accessibilityLabel="自定义时间"
+          value={customTime}
+          onChangeText={(value) => {
+            setCustomTime(value);
+            if (TIME_PATTERN.test(value)) setTime(value);
+          }}
+          placeholder="19:30"
+          placeholderTextColor="#A2A79F"
+          keyboardType="numbers-and-punctuation"
+          maxLength={5}
+          style={[styles.timeInput, customTime && !timeValid && styles.timeInputError]}
+        />
+      </View>
+    </Field>
+  );
+
+  const remindField = (
+    <Field label="提醒我">
+      <View style={styles.chips}>
+        {remindOptions.map((minutes) => (
+          <Chip
+            key={String(minutes)}
+            label={remindLabel(minutes, Boolean(draft.dueTime))}
+            selected={draft.remindBefore === minutes}
+            onPress={() => { setRemindTouched(true); update({ remindBefore: minutes }); }}
+          />
+        ))}
+      </View>
+      {draft.remindBefore !== null ? (
+        <Text style={styles.hint}>{`会推送到${draft.assignee === 'both' ? '两个人' : KITCHEN_MEMBERS.find((m) => m.id === draft.assignee)?.name ?? ''}的手机（需要在「我的」里开启通知）。`}</Text>
+      ) : null}
+    </Field>
+  );
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -99,21 +188,30 @@ export function ReminderEditor({
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) + 10 }]}>
           <View style={styles.handle} />
           <View style={styles.header}>
-            <Text style={styles.heading}>{editing ? '编辑提醒' : '新提醒'}</Text>
+            <Text style={styles.heading}>{editing ? (isEvent ? '编辑日程' : '编辑待办') : (isEvent ? '新日程' : '新待办')}</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="关闭" hitSlop={6} onPress={onClose} style={styles.close}>
               <Ionicons name="close" size={20} color={Colors.light.text} />
             </Pressable>
           </View>
 
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <Segmented
+              options={[{ key: 'task' as ReminderKind, label: '✅ 待办' }, { key: 'event' as ReminderKind, label: '📅 日程' }]}
+              value={draft.kind}
+              onChange={setKind}
+            />
+            {isEvent && !schedulesEnabled ? (
+              <Text style={styles.hint}>日程需要先升级数据库（见首页提示）。</Text>
+            ) : null}
+
             <View style={styles.titleInputRow}>
               <Text style={styles.titleEmoji}>{draft.emoji}</Text>
               <TextInput
-                accessibilityLabel="提醒内容"
+                accessibilityLabel={isEvent ? '日程内容' : '待办内容'}
                 autoFocus={!editing && !draft.title}
                 value={draft.title}
                 onChangeText={(title) => update({ title })}
-                placeholder="要做什么？比如：倒垃圾"
+                placeholder={isEvent ? '什么安排？比如：周杰伦演唱会' : '要做什么？比如：倒垃圾'}
                 placeholderTextColor="#A2A79F"
                 maxLength={80}
                 returnKeyType="done"
@@ -121,8 +219,8 @@ export function ReminderEditor({
               />
             </View>
 
-            {/* 子任务 */}
-            <View style={styles.subtasks}>
+            {/* 子任务（只有待办有） */}
+            {!isEvent ? <View style={styles.subtasks}>
               {draft.subtasks.map((subtask, index) => (
                 <View key={subtask.id} style={styles.subtaskRow}>
                   <View style={styles.subtaskDot} />
@@ -170,7 +268,7 @@ export function ReminderEditor({
               ) : (
                 <Text style={styles.hint}>子任务需要先升级数据库（见首页提示）。</Text>
               )}
-            </View>
+            </View> : null}
 
             <Field label="哪天">
               <View style={styles.chips}>
@@ -178,22 +276,15 @@ export function ReminderEditor({
                   const value = addDays(today, offset);
                   return <Chip key={label} label={label} selected={!pickingDate && draft.dueDate === value} onPress={() => { setPickingDate(false); update({ dueDate: value }); }} />;
                 })}
-                <Chip label="其他日期" selected={pickingDate} onPress={() => setPickingDate(true)} />
+                <Chip label={pickingDate ? dayLabel(draft.dueDate, today) : '选日期'} selected={pickingDate} onPress={() => setPickingDate(true)} />
               </View>
-              {pickingDate ? (
-                <View style={styles.dateRow}>
-                  <Pressable accessibilityRole="button" accessibilityLabel="前一天" hitSlop={4} onPress={() => update({ dueDate: addDays(draft.dueDate, -1) })} style={styles.dateArrow}>
-                    <Ionicons name="chevron-back" size={18} color={Colors.light.primary} />
-                  </Pressable>
-                  <Text style={styles.dateValue}>{dayLabel(draft.dueDate, today)}</Text>
-                  <Pressable accessibilityRole="button" accessibilityLabel="后一天" hitSlop={4} onPress={() => update({ dueDate: addDays(draft.dueDate, 1) })} style={styles.dateArrow}>
-                    <Ionicons name="chevron-forward" size={18} color={Colors.light.primary} />
-                  </Pressable>
-                </View>
-              ) : null}
+              {pickingDate ? <DatePicker value={draft.dueDate} today={today} onChange={(dueDate) => update({ dueDate })} /> : null}
             </Field>
 
-            <Field label="谁来做">
+            {isEvent ? timeField : null}
+            {isEvent ? remindField : null}
+
+            <Field label={isEvent ? '谁的日程' : '谁来做'}>
               <Segmented
                 options={[
                   ...KITCHEN_MEMBERS.map((member) => ({ key: member.id as ReminderAssignee, label: member.name })),
@@ -204,40 +295,21 @@ export function ReminderEditor({
               />
             </Field>
 
-            <MoreOptions summary={moreSummary} forceOpen={!timeValid}>
-              <Field label="几点">
-                <View style={styles.chips}>
-                  <Chip label="不定" selected={!draft.dueTime} onPress={() => { update({ dueTime: null }); setCustomTime(''); }} />
-                  {TIMES.map((time) => (
-                    <Chip key={time} label={time} selected={draft.dueTime === time} onPress={() => { update({ dueTime: time }); setCustomTime(''); }} />
-                  ))}
-                  <TextInput
-                    accessibilityLabel="自定义时间"
-                    value={customTime}
-                    onChangeText={(value) => {
-                      setCustomTime(value);
-                      if (TIME_PATTERN.test(value)) update({ dueTime: value });
-                    }}
-                    placeholder="19:30"
-                    placeholderTextColor="#A2A79F"
-                    keyboardType="numbers-and-punctuation"
-                    maxLength={5}
-                    style={[styles.timeInput, customTime && !timeValid && styles.timeInputError]}
-                  />
-                </View>
-              </Field>
+            <MoreOptions summary={moreSummary} forceOpen={!timeValid && !isEvent}>
+              {!isEvent ? timeField : null}
+              {!isEvent ? remindField : null}
 
               <Field label="重复">
-                <Segmented
-                  options={(Object.keys(REPEAT_LABELS) as ReminderRepeat[]).map((key) => ({ key, label: REPEAT_LABELS[key] }))}
-                  value={draft.repeat}
-                  onChange={(repeat) => update({ repeat })}
-                />
+                <View style={styles.chips}>
+                  {(Object.keys(REPEAT_LABELS) as ReminderRepeat[]).map((key) => (
+                    <Chip key={key} label={REPEAT_LABELS[key]} selected={draft.repeat === key} onPress={() => update({ repeat: key })} />
+                  ))}
+                </View>
               </Field>
 
               <Field label="图标">
                 <View style={styles.emojiRow}>
-                  {EMOJIS.map((emoji) => (
+                  {emojis.map((emoji) => (
                     <Pressable key={emoji} accessibilityRole="button" accessibilityLabel={`图标 ${emoji}`} accessibilityState={{ selected: draft.emoji === emoji }} onPress={() => update({ emoji })} style={[styles.emojiChip, draft.emoji === emoji && styles.emojiChipOn]}>
                       <Text style={styles.emojiText}>{emoji}</Text>
                     </Pressable>
@@ -250,7 +322,7 @@ export function ReminderEditor({
                   accessibilityLabel="备注"
                   value={draft.notes}
                   onChangeText={(notes) => update({ notes })}
-                  placeholder="比如：可回收的周三收"
+                  placeholder={isEvent ? '比如：在哪儿、带什么、票在谁那' : '比如：可回收的周三收'}
                   placeholderTextColor="#A2A79F"
                   multiline
                   style={styles.notes}
@@ -261,13 +333,13 @@ export function ReminderEditor({
 
           <View style={styles.footer}>
             {editing && onDelete ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="删除这条提醒" onPress={() => draft.id && onDelete(draft.id)} style={({ pressed }) => [styles.deleteButton, pressed && styles.pressed]}>
+              <Pressable accessibilityRole="button" accessibilityLabel={isEvent ? '删除这个日程' : '删除这条待办'} onPress={() => draft.id && onDelete(draft.id)} style={({ pressed }) => [styles.deleteButton, pressed && styles.pressed]}>
                 <Ionicons name="trash-outline" size={20} color={Colors.light.danger} />
               </Pressable>
             ) : null}
             <Pressable accessibilityRole="button" disabled={!canSave} onPress={save} style={({ pressed }) => [styles.saveWrap, !canSave && styles.disabled, pressed && styles.pressed]}>
               <GradientSurface sheen={canSave} style={styles.save}>
-                <Text style={styles.saveText}>{editing ? '保存' : '添加提醒'}</Text>
+                <Text style={styles.saveText}>{editing ? '保存' : isEvent ? '添加日程' : '添加待办'}</Text>
               </GradientSurface>
             </Pressable>
           </View>
@@ -330,9 +402,6 @@ const styles = StyleSheet.create({
   hint: { color: Colors.light.textSecondary, fontSize: 13, paddingVertical: 8 },
   field: { gap: 8 },
   fieldLabel: { color: Colors.light.textSecondary, fontSize: 13, fontWeight: '600' },
-  dateRow: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4, borderRadius: 16, backgroundColor: Colors.light.background },
-  dateArrow: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  dateValue: { color: Colors.light.text, fontSize: 16, fontWeight: '600' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 20, backgroundColor: Colors.light.background, borderWidth: 1, borderColor: Colors.light.border },
   chipOn: { backgroundColor: Colors.light.primary, borderColor: Colors.light.primary },

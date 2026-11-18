@@ -10,6 +10,7 @@ import { CHAT_COMPOSER_SPACE, ChatComposer } from '@/components/reminders/chat-c
 import { ReminderCalendar } from '@/components/reminders/reminder-calendar';
 import { blankReminderDraft, ReminderEditor, type ReminderDraft } from '@/components/reminders/reminder-editor';
 import { ReminderRow } from '@/components/reminders/reminder-row';
+import { EventRow, UpcomingEvents } from '@/components/reminders/upcoming-events';
 import { findKitchenMember, KITCHEN_MEMBERS } from '@/constants/members';
 import { Colors, DisplayText, Shadows } from '@/constants/theme';
 import { useTasks } from '@/context/tasks-context';
@@ -17,14 +18,18 @@ import {
   dayLabel,
   isAssignedTo,
   isDone,
+  isEvent,
   isSubtaskDone,
+  isTask,
   otherMember,
   overdueOccurrences,
   recentMessages,
   remindersOn,
   timeAgo,
   toDateKey,
+  upcomingEvents,
   type Reminder,
+  type ReminderKind,
 } from '@/data/reminders';
 
 type Filter = 'all' | 'mine' | 'theirs';
@@ -33,7 +38,7 @@ type Filter = 'all' | 'mine' | 'theirs';
 export default function RemindersScreen() {
   const insets = useSafeAreaInsets();
   const {
-    reminders, completions, nudges, subtaskChecks, status, subtasksReady, me,
+    reminders, completions, nudges, subtaskChecks, status, subtasksReady, schedulesReady, me,
     saveReminder, deleteReminder, setDone, setSubtaskDone, sendNudge, deleteMessages,
   } = useTasks();
   const today = toDateKey(new Date());
@@ -66,18 +71,24 @@ export default function RemindersScreen() {
   const matchesFilter = (reminder: Reminder) =>
     filter === 'all' ? true : filter === 'mine' ? isAssignedTo(reminder, me) : isAssignedTo(reminder, otherMember(me));
 
-  const dayList = remindersOn(reminders, selected).filter(matchesFilter);
+  const dayAll = remindersOn(reminders, selected).filter(matchesFilter);
+  const dayList = dayAll.filter(isTask);
+  const dayEvents = dayAll.filter(isEvent);
   const overdue = selected === today ? overdueOccurrences(reminders, completions, today).filter((o) => matchesFilter(o.reminder)) : [];
   const doneCount = dayList.filter((r) => isDone(completions, r.id, selected)).length;
 
-  // 今天每个人还剩几件（主卡片用）
-  const todayList = remindersOn(reminders, today);
+  // 今天每个人还剩几件待办（主卡片用；日程不算）
+  const todayList = remindersOn(reminders, today).filter(isTask);
   const remainingToday = todayList.filter((r) => !isDone(completions, r.id, today));
   const remainingFor = (member: 'a' | 'b') => remainingToday.filter((r) => isAssignedTo(r, member)).length;
   const messages = useMemo(() => recentMessages(nudges), [nudges]);
+  const now = new Date();
+  const upcoming = upcomingEvents(reminders, today, now.getHours() * 60 + now.getMinutes());
 
-  function openNew(title = '') {
-    setEditing(blankReminderDraft(selected, filter === 'theirs' ? otherMember(me) : 'both', title));
+  function openNew(title = '', kind: ReminderKind = 'task') {
+    // 默认用日历上选中的那天；日程不会往过去加，选中的是过去的日子就从今天开始
+    const date = kind === 'event' && selected < today ? today : selected;
+    setEditing(blankReminderDraft(date, filter === 'theirs' ? otherMember(me) : 'both', title, kind));
     setEditorOpen(true);
   }
 
@@ -117,9 +128,12 @@ export default function RemindersScreen() {
       await action();
       if (success) setToast(success);
     } catch (error) {
-      setToast(error instanceof Error && error.message === 'subtasks-not-installed'
+      const message = error instanceof Error ? error.message : '';
+      setToast(message === 'subtasks-not-installed'
         ? '子任务需要先升级数据库'
-        : '没同步成功，请检查网络后再试');
+        : message === 'schedules-not-installed'
+          ? '日程和提醒设置需要先升级数据库'
+          : '没同步成功，请检查网络后再试');
     }
   }
 
@@ -180,6 +194,25 @@ export default function RemindersScreen() {
           </View>
         </GradientSurface>
 
+        {status !== 'needs-setup' && !schedulesReady ? (
+          <View style={styles.setupCard}>
+            <Text style={styles.setupTitle}>🛠️ 日程需要升级数据库</Text>
+            <Text style={styles.setupText}>
+              在 Supabase 里执行一次 supabase/migrations/20261119000000_schedules.sql 后，就能添加日程、设置每年 / 工作日重复，并单独设置每件事要不要提醒。其他功能不受影响。
+            </Text>
+          </View>
+        ) : null}
+
+        <UpcomingEvents
+          items={upcoming}
+          today={today}
+          onOpen={({ reminder, date }) => {
+            setSelected(date);
+            openEdit(reminder);
+          }}
+          onAdd={() => openNew('', 'event')}
+        />
+
         <ReminderCalendar selected={selected} today={today} reminders={reminders} completions={completions} onSelect={setSelected} />
 
         <View style={styles.filters}>
@@ -218,6 +251,13 @@ export default function RemindersScreen() {
 
         <View style={styles.section}>
           <SectionHeader title={dayLabel(selected, today)} detail={dayList.length ? `已完成 ${doneCount}/${dayList.length}` : undefined} />
+          {dayEvents.length > 0 ? (
+            <View style={styles.listCard}>
+              {dayEvents.map((reminder) => (
+                <EventRow key={reminder.id} reminder={reminder} onOpen={() => openEdit(reminder)} />
+              ))}
+            </View>
+          ) : null}
           {dayList.length > 0 ? (
             <>
               <View style={styles.progressTrack}>
@@ -243,6 +283,11 @@ export default function RemindersScreen() {
                 })}
               </View>
             </>
+          ) : dayEvents.length > 0 ? (
+            <Pressable accessibilityRole="button" onPress={() => openNew()} style={({ pressed }) => [styles.emptyButton, styles.addTaskInline, pressed && styles.pressed]}>
+              <Ionicons name="add" size={18} color={Colors.light.primary} />
+              <Text style={styles.emptyButtonText}>添加待办</Text>
+            </Pressable>
           ) : (
             <View style={styles.empty}>
               <Text style={styles.emptyEmoji}>🗓️</Text>
@@ -330,11 +375,12 @@ export default function RemindersScreen() {
         today={today}
         defaultAssignee="both"
         subtasksEnabled={subtasksReady}
+        schedulesEnabled={schedulesReady}
         onClose={() => setEditorOpen(false)}
         onSave={(draft) => {
           setEditorOpen(false);
           setSelected(draft.dueDate);
-          void run(() => saveReminder(draft), draft.id ? '已保存' : '已添加提醒');
+          void run(() => saveReminder(draft), draft.id ? '已保存' : draft.kind === 'event' ? '已添加日程' : '已添加待办');
         }}
         onDelete={(id) => {
           setEditorOpen(false);
@@ -404,6 +450,7 @@ const styles = StyleSheet.create({
   makeReminder: { minHeight: 24, flexDirection: 'row', alignItems: 'center', gap: 3 },
   makeReminderText: { color: Colors.light.primary, fontSize: 12, fontWeight: '600' },
   bubbleSelected: { opacity: 0.72 },
+  addTaskInline: { alignSelf: 'flex-start' },
   deleteMessage: { minHeight: 24, flexDirection: 'row', alignItems: 'center', gap: 3 },
   deleteMessageText: { color: Colors.light.danger, fontSize: 12, fontWeight: '600' },
   clearMessages: { minHeight: 28, paddingHorizontal: 10, borderRadius: 14, justifyContent: 'center' },

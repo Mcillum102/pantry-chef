@@ -6,6 +6,7 @@ import {
   addDays,
   otherMember,
   toDateKey,
+  withScheduleDefaults,
   type MemberId,
   type Nudge,
   type Reminder,
@@ -21,6 +22,7 @@ import {
   newId,
   RemindersNotInstalledError,
   saveReminderRow,
+  SchedulesNotInstalledError,
   sendNudgeRow,
   deleteNudgeRows,
   setCompletionRow,
@@ -41,6 +43,8 @@ type TasksContextValue = TasksSnapshot & {
   status: TasksStatus;
   /** 云端已经执行了子任务的 migration（本机模式下总是 true） */
   subtasksReady: boolean;
+  /** 云端已经执行了日程的 migration（本机模式下总是 true） */
+  schedulesReady: boolean;
   me: MemberId;
   saveReminder: (reminder: Omit<Reminder, 'id' | 'createdBy'> & { id?: string }) => Promise<void>;
   deleteReminder: (id: string) => Promise<void>;
@@ -62,7 +66,7 @@ const EMPTY: TasksSnapshot = { reminders: [], completions: [], nudges: [], subta
 /** 旧版本缓存里没有子任务字段，读出来时补齐 */
 function normalizeSnapshot(snapshot: Partial<TasksSnapshot> | null | undefined): TasksSnapshot {
   return {
-    reminders: (snapshot?.reminders ?? []).map((r) => ({ ...r, subtasks: Array.isArray(r.subtasks) ? r.subtasks : [] })),
+    reminders: (snapshot?.reminders ?? []).map((r) => withScheduleDefaults({ ...r, subtasks: Array.isArray(r.subtasks) ? r.subtasks : [] })),
     completions: snapshot?.completions ?? [],
     nudges: snapshot?.nudges ?? [],
     subtaskChecks: snapshot?.subtaskChecks ?? [],
@@ -79,6 +83,7 @@ export function TasksProvider({ children }: PropsWithChildren) {
   const [storedCache, setCache] = usePersistentState<TasksSnapshot>('tasks-cache-v1', EMPTY);
   const cache = useMemo(() => normalizeSnapshot(storedCache), [storedCache]);
   const [subtasksReady, setSubtasksReady] = useState(true);
+  const [schedulesReady, setSchedulesReady] = useState(true);
   const [status, setStatus] = useState<TasksStatus>(configured ? 'loading' : 'local');
   const [nonce, setNonce] = useState(0);
   const cloud = configured && Boolean(householdId);
@@ -88,9 +93,10 @@ export function TasksProvider({ children }: PropsWithChildren) {
   const load = useCallback(async () => {
     if (!cloud || !householdId) return;
     try {
-      const { subtasksReady: ready, ...data } = await fetchRemindersData(householdId, addDays(toDateKey(new Date()), -45));
+      const { subtasksReady: ready, schedulesReady: schedulesOk, ...data } = await fetchRemindersData(householdId, addDays(toDateKey(new Date()), -45));
       setCache(data);
       setSubtasksReady(ready);
+      setSchedulesReady(schedulesOk);
       setStatus('ready');
     } catch (error) {
       setStatus(error instanceof RemindersNotInstalledError ? 'needs-setup' : 'error');
@@ -135,6 +141,7 @@ export function TasksProvider({ children }: PropsWithChildren) {
       setCache(before);
       if (error instanceof RemindersNotInstalledError) setStatus('needs-setup');
       if (error instanceof SubtasksNotInstalledError) setSubtasksReady(false);
+      if (error instanceof SchedulesNotInstalledError) setSchedulesReady(false);
       throw error;
     }
   }, [cloud, setCache]);
@@ -143,6 +150,13 @@ export function TasksProvider({ children }: PropsWithChildren) {
     const existing = input.id ? cacheRef.current.reminders.find((r) => r.id === input.id) : undefined;
     const reminder: Reminder = { ...input, subtasks: input.subtasks ?? [], id: input.id ?? newId(), createdBy: existing?.createdBy ?? me };
     if (cloud && !subtasksReady && reminder.subtasks.length > 0) throw new SubtasksNotInstalledError();
+    // 数据库升级前只能存「待办 + 原来的重复方式」；提醒方式沿用旧规则（有时间就准时提醒）
+    if (cloud && !schedulesReady && (
+      reminder.kind === 'event'
+      || reminder.repeat === 'weekdays'
+      || reminder.repeat === 'yearly'
+      || reminder.remindBefore !== (reminder.dueTime ? 0 : null)
+    )) throw new SchedulesNotInstalledError();
     await mutate(
       (current) => ({
         ...current,
@@ -150,9 +164,9 @@ export function TasksProvider({ children }: PropsWithChildren) {
           ? current.reminders.map((r) => (r.id === reminder.id ? reminder : r))
           : [...current.reminders, reminder],
       }),
-      householdId ? () => saveReminderRow(householdId, reminder, subtasksReady) : undefined
+      householdId ? () => saveReminderRow(householdId, reminder, { subtasks: subtasksReady, schedules: schedulesReady }) : undefined
     );
-  }, [cloud, householdId, me, mutate, subtasksReady]);
+  }, [cloud, householdId, me, mutate, schedulesReady, subtasksReady]);
 
   const deleteReminder = useCallback(async (id: string) => {
     await mutate(
@@ -228,6 +242,7 @@ export function TasksProvider({ children }: PropsWithChildren) {
     ...cache,
     status,
     subtasksReady: !cloud || subtasksReady,
+    schedulesReady: !cloud || schedulesReady,
     me,
     saveReminder,
     deleteReminder,
@@ -238,7 +253,7 @@ export function TasksProvider({ children }: PropsWithChildren) {
     markRead,
     unreadForMe,
     refresh: () => setNonce((n) => n + 1),
-  }), [cache, cloud, deleteMessages, deleteReminder, markRead, me, saveReminder, sendNudge, setDone, setSubtaskDone, status, subtasksReady, unreadForMe]);
+  }), [cache, cloud, deleteMessages, deleteReminder, markRead, me, saveReminder, schedulesReady, sendNudge, setDone, setSubtaskDone, status, subtasksReady, unreadForMe]);
 
   return <TasksContext.Provider value={value}>{children}</TasksContext.Provider>;
 }

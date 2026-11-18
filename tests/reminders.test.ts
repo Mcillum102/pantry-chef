@@ -4,20 +4,26 @@ import test from 'node:test';
 import {
   addDays,
   cleanSubtasks,
+  daysUntilLabel,
+  defaultRemindBefore,
+  fitRemindBefore,
   isAssignedTo,
   monthGrid,
   occursOn,
   overdueOccurrences,
   recentMessages,
   remindersOn,
+  remindLabel,
   subtaskProgress,
+  upcomingEvents,
   weekOf,
+  withScheduleDefaults,
   type Reminder,
 } from '../src/data/reminders.ts';
 
 const base: Reminder = {
-  id: 'r', title: '倒垃圾', emoji: '🗑️', notes: '', dueDate: '2026-10-26', dueTime: null,
-  repeat: 'none', assignee: 'both', createdBy: 'a', subtasks: [],
+  id: 'r', kind: 'task', title: '倒垃圾', emoji: '🗑️', notes: '', dueDate: '2026-10-26', dueTime: null,
+  repeat: 'none', assignee: 'both', createdBy: 'a', subtasks: [], remindBefore: null,
 };
 
 test('one-off reminders only happen on their day', () => {
@@ -107,4 +113,64 @@ test('recentMessages keeps the newest 20 in chat order', () => {
   assert.equal(shown.length, 20);
   assert.equal(shown[0].id, '10');
   assert.equal(shown[19].id, '29');
+});
+
+test('weekday reminders skip weekends; yearly ones come back on the same date', () => {
+  const work = { ...base, dueDate: '2026-11-16', repeat: 'weekdays' as const };
+  assert.equal(occursOn(work, '2026-11-20'), true); // Fri
+  assert.equal(occursOn(work, '2026-11-21'), false); // Sat
+  assert.equal(occursOn(work, '2026-11-23'), true); // Mon
+  const birthday = { ...base, dueDate: '2024-02-29', repeat: 'yearly' as const };
+  assert.equal(occursOn(birthday, '2026-02-28'), true); // 平年落到 2 月 28 日
+  assert.equal(occursOn(birthday, '2028-02-29'), true);
+  assert.equal(occursOn(birthday, '2028-02-28'), false);
+  assert.equal(occursOn(birthday, '2026-03-29'), false);
+});
+
+test('missed daily chores do not pile up; other repeats show only the latest miss', () => {
+  const daily = { ...base, id: 'd', repeat: 'daily' as const, dueDate: '2026-10-01' };
+  const weekly = { ...base, id: 'w', repeat: 'weekly' as const, dueDate: '2026-10-05' };
+  const once = { ...base, id: 'o', dueDate: '2026-11-14' };
+  const concert = { ...base, id: 'e', kind: 'event' as const, dueDate: '2026-11-13' };
+  const overdue = overdueOccurrences([daily, weekly, once, concert], [], '2026-11-17', 14);
+  assert.deepEqual(overdue.map((o) => `${o.reminder.id}:${o.date}`), ['w:2026-11-16', 'o:2026-11-14']);
+  // 最近一次已经补做了：更早漏掉的那次不再翻出来
+  const done = [{ reminderId: 'w', occurrenceDate: '2026-11-16', doneBy: 'a' as const, doneAt: '' }];
+  assert.deepEqual(overdueOccurrences([weekly], done, '2026-11-17', 14), []);
+});
+
+test('upcoming events: next occurrence of each, past times today are skipped', () => {
+  const concert = { ...base, id: 'concert', kind: 'event' as const, dueDate: '2026-11-24', dueTime: '19:30' };
+  const lunch = { ...base, id: 'lunch', kind: 'event' as const, dueDate: '2026-11-17', dueTime: '12:00' };
+  const allDay = { ...base, id: 'all-day', kind: 'event' as const, dueDate: '2026-11-17' };
+  const birthday = { ...base, id: 'bday', kind: 'event' as const, dueDate: '1995-03-02', repeat: 'yearly' as const };
+  const chore = { ...base, id: 'chore', dueDate: '2026-11-18' };
+  const list = upcomingEvents([concert, lunch, allDay, birthday, chore], '2026-11-17', 13 * 60);
+  assert.deepEqual(list.map((o) => `${o.reminder.id}:${o.date}`), ['all-day:2026-11-17', 'concert:2026-11-24', 'bday:2027-03-02']);
+  assert.equal(upcomingEvents([concert, birthday], '2026-11-17', 0, 1).length, 1);
+});
+
+test('remind options: labels, defaults and switching between timed and all-day', () => {
+  assert.equal(remindLabel(null, true), '不提醒');
+  assert.equal(remindLabel(0, true), '准时');
+  assert.equal(remindLabel(60, true), '提前 1 小时');
+  assert.equal(remindLabel(1440, false), '前一天 09:00');
+  assert.equal(remindLabel(10080, true), '提前 1 周');
+  assert.equal(defaultRemindBefore('event', '19:30'), 60);
+  assert.equal(defaultRemindBefore('event', null), 0);
+  assert.equal(defaultRemindBefore('task', '18:00'), 0);
+  assert.equal(defaultRemindBefore('task', null), null);
+  assert.equal(fitRemindBefore(60, false), 0); // 全天没有「提前 1 小时」
+  assert.equal(fitRemindBefore(1440, false), 1440);
+  assert.equal(fitRemindBefore(null, false), null);
+  assert.equal(daysUntilLabel('2026-11-24', '2026-11-17'), '7 天后');
+  assert.equal(daysUntilLabel('2026-11-18', '2026-11-17'), '明天');
+});
+
+test('old cached reminders keep their previous push behaviour', () => {
+  assert.deepEqual(
+    [withScheduleDefaults({ dueTime: '18:00' }), withScheduleDefaults({ dueTime: null })].map((r) => [r.kind, r.remindBefore]),
+    [['task', 0], ['task', null]]
+  );
+  assert.equal(withScheduleDefaults({ dueTime: '18:00', kind: 'event', remindBefore: null }).remindBefore, null);
 });

@@ -4,12 +4,12 @@
 //   { type: 'public-key' }              返回推送公钥（公开信息，App 订阅时要用）；第一次调用时生成密钥
 //   { type: 'test', member }            给自己发一条测试通知（需要登录态 Authorization）
 //   { type: 'nudge', nudgeId }          有人发了消息 → 推给对方（数据库触发器调用，需要 x-push-secret）
-//   { type: 'tick' }                    每分钟检查到点的提醒（pg_cron 调用，需要 x-push-secret）
+//   { type: 'tick' }                    每分钟检查该推送的提醒 / 日程（pg_cron 调用，需要 x-push-secret）
 //
 // 密钥都在数据库 public.push_config 里（只有服务端能读），不经过 App 也不需要手动配置。
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-import { dueReminders, localClock, DEFAULT_TIME_ZONE, type MemberId, type ScheduledReminder } from './schedule.ts';
+import { addDays, dueNotifications, localClock, notificationBody, DEFAULT_TIME_ZONE, type MemberId, type ScheduledReminder } from './schedule.ts';
 import { generateVapidKeys, sendWebPush, type PushMessage, type VapidKeys } from './webpush.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
@@ -116,13 +116,13 @@ async function handleTick() {
   const householdIds = [...new Set(subs.map((s) => s.household_id))];
   const { data: reminderRows, error: reminderError } = await admin
     .from('reminders')
-    .select('id,household_id,title,emoji,due_date,due_time,repeat,assignee')
+    .select('id,household_id,kind,title,emoji,due_date,due_time,repeat,assignee,remind_before')
     .in('household_id', householdIds)
-    .not('due_time', 'is', null);
+    .not('remind_before', 'is', null);
   if (reminderError) throw reminderError;
   const reminders: ScheduledReminder[] = (reminderRows ?? []).map((row) => ({
-    id: row.id, householdId: row.household_id, title: row.title, emoji: row.emoji,
-    dueDate: row.due_date, dueTime: row.due_time, repeat: row.repeat, assignee: row.assignee,
+    id: row.id, householdId: row.household_id, kind: row.kind === 'event' ? 'event' : 'task', title: row.title, emoji: row.emoji,
+    dueDate: row.due_date, dueTime: row.due_time, repeat: row.repeat, assignee: row.assignee, remindBefore: row.remind_before,
   }));
   if (reminders.length === 0) return { sent: 0 };
 
@@ -136,26 +136,28 @@ async function handleTick() {
     const { household_id: householdId, member } = devices[0];
     const clock = localClock(now, devices[0].timezone || DEFAULT_TIME_ZONE);
     const own = reminders.filter((r) => r.householdId === householdId);
+    // 提前提醒最多提前一周多，往后看 9 天的完成记录就够
     const { data: completions } = await admin
       .from('reminder_completions')
-      .select('reminder_id')
+      .select('reminder_id,occurrence_date')
       .eq('household_id', householdId)
-      .eq('occurrence_date', clock.dateKey);
-    const done = new Set((completions ?? []).map((c) => c.reminder_id as string));
+      .gte('occurrence_date', clock.dateKey)
+      .lte('occurrence_date', addDays(clock.dateKey, 9));
+    const done = new Set((completions ?? []).map((c) => `${c.reminder_id}:${c.occurrence_date}`));
 
-    for (const reminder of dueReminders(own, member, clock, (id) => done.has(id))) {
-      // 先登记再发送：同一条提醒同一天只推一次
+    for (const { reminder, occurrenceDate, daysAhead } of dueNotifications(own, member, clock, (id, date) => done.has(`${id}:${date}`))) {
+      // 先登记再发送：同一条提醒的同一次只推一次
       const { data: claimed, error: claimError } = await admin
         .from('push_deliveries')
-        .upsert({ reminder_id: reminder.id, occurrence_date: clock.dateKey, member }, { onConflict: 'reminder_id,occurrence_date,member', ignoreDuplicates: true })
+        .upsert({ reminder_id: reminder.id, occurrence_date: occurrenceDate, member }, { onConflict: 'reminder_id,occurrence_date,member', ignoreDuplicates: true })
         .select('reminder_id');
       if (claimError) throw claimError;
       if (!claimed || claimed.length === 0) continue;
       const result = await deliver(devices, {
         title: `${reminder.emoji} ${reminder.title}`,
-        body: `${reminder.dueTime} 该做啦${reminder.assignee === 'both' ? '（一起）' : ''}`,
+        body: notificationBody(reminder, daysAhead),
         url: '/',
-        tag: `reminder-${reminder.id}-${clock.dateKey}`,
+        tag: `reminder-${reminder.id}-${occurrenceDate}`,
       });
       sent += result.sent;
     }

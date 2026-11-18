@@ -7,6 +7,8 @@ import { Colors, Shadows } from '@/constants/theme';
 import {
   fromDateKey,
   isDone,
+  isEvent,
+  isTask,
   monthGrid,
   remindersOn,
   weekOf,
@@ -15,9 +17,9 @@ import {
   type ReminderCompletion,
 } from '@/data/reminders';
 
-type DayState = 'none' | 'pending' | 'done';
+type DayState = { tasks: 'none' | 'pending' | 'done'; event: boolean };
 
-/** 一周日历条，可展开成整月。每天下面的小点：橙色有未完成，绿色全部完成 */
+/** 一周日历条，可展开成整月。每天下面的小点：橙色有待办没做完，绿色待办全部完成，蓝色有日程 */
 export function ReminderCalendar({
   selected,
   today,
@@ -41,7 +43,11 @@ export function ReminderCalendar({
       const hit = cache.get(date);
       if (hit) return hit;
       const list = remindersOn(reminders, date);
-      const state: DayState = list.length === 0 ? 'none' : list.every((r) => isDone(completions, r.id, date)) ? 'done' : 'pending';
+      const tasks = list.filter(isTask);
+      const state: DayState = {
+        tasks: tasks.length === 0 ? 'none' : tasks.every((r) => isDone(completions, r.id, date)) ? 'done' : 'pending',
+        event: list.some(isEvent),
+      };
       cache.set(date, state);
       return state;
     };
@@ -110,14 +116,19 @@ export function ReminderCalendar({
             <Pressable
               key={date}
               accessibilityRole="button"
-              accessibilityLabel={`${d.getMonth() + 1}月${d.getDate()}日${state === 'pending' ? '，有待办' : state === 'done' ? '，已全部完成' : ''}`}
+              accessibilityLabel={`${d.getMonth() + 1}月${d.getDate()}日${state.event ? '，有日程' : ''}${state.tasks === 'pending' ? '，有待办' : state.tasks === 'done' ? '，待办已全部完成' : ''}`}
               accessibilityState={{ selected: isSelected }}
               onPress={() => onSelect(date)}
               style={styles.cell}>
               <View style={[styles.day, isToday && !isSelected && styles.dayToday, isSelected && styles.daySelected]}>
                 <Text style={[styles.dayText, outside && styles.dayOutside, isSelected && styles.dayTextSelected]}>{d.getDate()}</Text>
               </View>
-              <View style={[styles.dot, state === 'pending' && styles.dotPending, state === 'done' && styles.dotDone]} />
+              <View style={styles.dots}>
+                {state.event ? <View style={[styles.dot, styles.dotEvent]} /> : null}
+                {state.tasks !== 'none' || !state.event ? (
+                  <View style={[styles.dot, state.tasks === 'pending' && styles.dotPending, state.tasks === 'done' && styles.dotDone]} />
+                ) : null}
+              </View>
             </Pressable>
           );
         })}
@@ -144,7 +155,9 @@ const styles = StyleSheet.create({
   dayText: { color: Colors.light.text, fontSize: 16, fontWeight: '500' },
   dayTextSelected: { color: '#FFFFFF', fontWeight: '600' },
   dayOutside: { color: '#B8BCB4' },
+  dots: { flexDirection: 'row', gap: 3 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'transparent' },
+  dotEvent: { backgroundColor: '#4C7FD1' },
   dotPending: { backgroundColor: '#E09A3A' },
   dotDone: { backgroundColor: '#5E9A6F' },
 });

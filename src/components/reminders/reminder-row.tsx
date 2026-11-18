@@ -5,7 +5,7 @@ import Animated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSequence,
 
 import { Colors } from '@/constants/theme';
 import { findKitchenMember } from '@/constants/members';
-import { REPEAT_LABELS, type MemberId, type Reminder } from '@/data/reminders';
+import { remindLabel, REPEAT_LABELS, type MemberId, type Reminder } from '@/data/reminders';
 
 type Props = {
   reminder: Reminder;
@@ -70,6 +70,12 @@ export function ReminderRow({ reminder, done, doneBy, overdueLabel, canNudge, nu
             <View style={styles.metaItem}>
               <Ionicons name="time-outline" size={13} color={Colors.light.textSecondary} />
               <Text style={styles.metaText}>{reminder.dueTime}</Text>
+            </View>
+          ) : null}
+          {reminder.remindBefore !== null && reminder.remindBefore !== undefined ? (
+            <View style={styles.metaItem} accessibilityLabel={`提醒：${remindLabel(reminder.remindBefore, Boolean(reminder.dueTime))}`}>
+              <Ionicons name="notifications-outline" size={13} color={Colors.light.textSecondary} />
+              {reminder.remindBefore > 0 ? <Text style={styles.metaText}>{remindLabel(reminder.remindBefore, Boolean(reminder.dueTime)).replace('提前 ', '')}</Text> : null}
             </View>
           ) : null}
           {subtasks.length > 0 ? (
