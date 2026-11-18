@@ -22,6 +22,7 @@ import {
   RemindersNotInstalledError,
   saveReminderRow,
   sendNudgeRow,
+  deleteNudgeRows,
   setCompletionRow,
   setSubtaskCheckRow,
   SubtasksNotInstalledError,
@@ -46,6 +47,8 @@ type TasksContextValue = TasksSnapshot & {
   setDone: (reminder: Reminder, date: string, done: boolean) => Promise<void>;
   setSubtaskDone: (reminder: Reminder, subtaskId: string, date: string, done: boolean) => Promise<void>;
   sendNudge: (message: string, reminderId?: string | null) => Promise<void>;
+  /** 删除消息（两边都消失）；'all' 清空全部 */
+  deleteMessages: (ids: string[] | 'all') => Promise<void>;
   markRead: (ids: string[]) => Promise<void>;
   /** 发给我、还没看的「催一下」，最新的在前 */
   unreadForMe: Nudge[];
@@ -200,6 +203,13 @@ export function TasksProvider({ children }: PropsWithChildren) {
     );
   }, [householdId, me, mutate]);
 
+  const deleteMessages = useCallback(async (ids: string[] | 'all') => {
+    await mutate(
+      (current) => ({ ...current, nudges: ids === 'all' ? [] : current.nudges.filter((n) => !ids.includes(n.id)) }),
+      householdId ? () => deleteNudgeRows(householdId, ids) : undefined
+    );
+  }, [householdId, mutate]);
+
   const markRead = useCallback(async (ids: string[]) => {
     if (ids.length === 0) return;
     const readAt = new Date().toISOString();
@@ -224,10 +234,11 @@ export function TasksProvider({ children }: PropsWithChildren) {
     setDone,
     setSubtaskDone,
     sendNudge,
+    deleteMessages,
     markRead,
     unreadForMe,
     refresh: () => setNonce((n) => n + 1),
-  }), [cache, cloud, deleteReminder, markRead, me, saveReminder, sendNudge, setDone, setSubtaskDone, status, subtasksReady, unreadForMe]);
+  }), [cache, cloud, deleteMessages, deleteReminder, markRead, me, saveReminder, sendNudge, setDone, setSubtaskDone, status, subtasksReady, unreadForMe]);
 
   return <TasksContext.Provider value={value}>{children}</TasksContext.Provider>;
 }

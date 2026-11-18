@@ -165,6 +165,14 @@ export async function sendNudgeRow(householdId: string, nudge: Pick<Nudge, 'id' 
   check(error);
 }
 
+/** 删除消息（两台手机都会消失）；'all' 表示清空这个家庭的全部消息 */
+export async function deleteNudgeRows(householdId: string, ids: string[] | 'all') {
+  if (ids !== 'all' && ids.length === 0) return;
+  const query = client().from('nudges').delete().eq('household_id', householdId);
+  const { error } = ids === 'all' ? await query : await query.in('id', ids);
+  check(error);
+}
+
 export async function markNudgesReadRows(ids: string[]) {
   if (ids.length === 0) return;
   const { error } = await client().from('nudges').update({ read_at: new Date().toISOString() }).in('id', ids);
@@ -179,6 +187,8 @@ export function subscribeReminders(householdId: string, onChange: () => void) {
   ['reminders', 'reminder_completions', 'nudges', 'reminder_subtask_checks'].forEach((table) => {
     channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: `household_id=eq.${householdId}` }, onChange);
   });
+  // Supabase 的删除事件不能按 household_id 过滤（带过滤条件就收不到），消息删除单独监听；回调只是重新拉取，多收到也无妨
+  channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'nudges' }, onChange);
   channel.subscribe((status) => {
     if (status === 'SUBSCRIBED') onChange();
   });

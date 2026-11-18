@@ -34,7 +34,7 @@ export default function RemindersScreen() {
   const insets = useSafeAreaInsets();
   const {
     reminders, completions, nudges, subtaskChecks, status, subtasksReady, me,
-    saveReminder, deleteReminder, setDone, setSubtaskDone, sendNudge,
+    saveReminder, deleteReminder, setDone, setSubtaskDone, sendNudge, deleteMessages,
   } = useTasks();
   const today = toDateKey(new Date());
   const [selected, setSelected] = useState(today);
@@ -44,9 +44,18 @@ export default function RemindersScreen() {
   const [scrollToEndKey, setScrollToEndKey] = useState(0);
   const [nudged, setNudged] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  // 点一下（或长按）消息 → 显示「删除」；「清空」要点两次才生效
+  const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const meMember = findKitchenMember(me);
   const other = findKitchenMember(otherMember(me));
+
+  useEffect(() => {
+    if (!confirmClear) return;
+    const timer = setTimeout(() => setConfirmClear(false), 4000);
+    return () => clearTimeout(timer);
+  }, [confirmClear]);
 
   useEffect(() => {
     if (!toast) return;
@@ -81,6 +90,21 @@ export default function RemindersScreen() {
       setToast('没发出去，请检查网络后再试');
       return false;
     }
+  }
+
+  function removeMessage(id: string) {
+    setSelectedMessage(null);
+    void run(() => deleteMessages([id]), '已删除');
+  }
+
+  function clearMessages() {
+    if (!confirmClear) {
+      setConfirmClear(true);
+      return;
+    }
+    setConfirmClear(false);
+    setSelectedMessage(null);
+    void run(() => deleteMessages('all'), '消息已清空');
   }
 
   function openEdit(reminder: Reminder) {
@@ -233,19 +257,53 @@ export default function RemindersScreen() {
         </View>
 
         <View style={styles.section}>
-          <SectionHeader title="消息" detail={messages.length ? `最近 ${messages.length} 条` : undefined} />
+          <SectionHeader
+            title="消息"
+            detail={messages.length ? `最近 ${messages.length} 条` : undefined}
+            action={messages.length > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={confirmClear ? '确定清空全部消息' : '清空全部消息'}
+                hitSlop={8}
+                onPress={clearMessages}
+                style={({ pressed }) => [styles.clearMessages, confirmClear && styles.clearMessagesConfirm, pressed && styles.pressed]}>
+                <Text style={[styles.clearMessagesText, confirmClear && styles.clearMessagesTextConfirm]}>
+                  {confirmClear ? '确定清空？' : '清空'}
+                </Text>
+              </Pressable>
+            ) : undefined}
+          />
           {messages.length > 0 ? (
             <View style={styles.messages}>
               {messages.map((n) => {
                 const mine = n.fromMember === me;
                 const from = findKitchenMember(n.fromMember);
+                const selected = selectedMessage === n.id;
+                const toggle = () => setSelectedMessage((current) => (current === n.id ? null : n.id));
                 return (
                   <View key={n.id} style={[styles.bubbleRow, mine && styles.bubbleRowMine]}>
-                    <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}>
-                      <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>{n.message}</Text>
-                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityHint="点一下显示删除"
+                      onPress={toggle}
+                      onLongPress={() => setSelectedMessage(n.id)}
+                      delayLongPress={350}
+                      style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs, selected && styles.bubbleSelected]}>
+                      <Text selectable={false} style={[styles.bubbleText, mine && styles.bubbleTextMine]}>{n.message}</Text>
+                    </Pressable>
                     <View style={[styles.bubbleMetaRow, mine && styles.bubbleMetaRowMine]}>
                       <Text style={styles.bubbleMeta}>{`${mine ? '我' : from?.name ?? ''} · ${timeAgo(n.createdAt)}${mine ? (n.readAt ? ' · 已读' : ' · 未读') : ''}`}</Text>
+                      {selected ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`删除「${n.message}」`}
+                          hitSlop={8}
+                          onPress={() => removeMessage(n.id)}
+                          style={({ pressed }) => [styles.deleteMessage, pressed && styles.pressed]}>
+                          <Ionicons name="trash-outline" size={13} color={Colors.light.danger} />
+                          <Text style={styles.deleteMessageText}>删除</Text>
+                        </Pressable>
+                      ) : null}
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`把「${n.message}」设为提醒`}
@@ -345,6 +403,13 @@ const styles = StyleSheet.create({
   bubbleMetaRowMine: { flexDirection: 'row-reverse' },
   makeReminder: { minHeight: 24, flexDirection: 'row', alignItems: 'center', gap: 3 },
   makeReminderText: { color: Colors.light.primary, fontSize: 12, fontWeight: '600' },
+  bubbleSelected: { opacity: 0.72 },
+  deleteMessage: { minHeight: 24, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  deleteMessageText: { color: Colors.light.danger, fontSize: 12, fontWeight: '600' },
+  clearMessages: { minHeight: 28, paddingHorizontal: 10, borderRadius: 14, justifyContent: 'center' },
+  clearMessagesConfirm: { backgroundColor: Colors.light.dangerSoft },
+  clearMessagesText: { color: Colors.light.textSecondary, fontSize: 13, fontWeight: '600' },
+  clearMessagesTextConfirm: { color: Colors.light.danger },
   messagesEmpty: { color: Colors.light.textSecondary, fontSize: 14, lineHeight: 20 },
   toast: { position: 'absolute', alignSelf: 'center', paddingHorizontal: 18, paddingVertical: 12, borderRadius: 18, backgroundColor: '#1E2420', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.22)' },
   toastText: { color: '#FFFFFF', fontSize: 14, fontWeight: '500' },

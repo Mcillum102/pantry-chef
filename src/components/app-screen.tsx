@@ -154,11 +154,16 @@ export function AppScreen({ eyebrow, title, subtitle, action, bottomSpace = 0, s
   );
 }
 
-export function SectionHeader({ title, detail }: { title: string; detail?: string }) {
+export function SectionHeader({ title, detail, action }: { title: string; detail?: string; action?: ReactNode }) {
   return (
     <View style={styles.sectionHeader}>
       <Text style={[styles.sectionTitle, DisplayText]}>{title}</Text>
-      {detail ? <Text style={styles.sectionDetail}>{detail}</Text> : null}
+      {detail || action ? (
+        <View style={styles.sectionAside}>
+          {detail ? <Text style={styles.sectionDetail}>{detail}</Text> : null}
+          {action}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -252,6 +257,11 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     fontSize: 23,
     lineHeight: 30,
+  },
+  sectionAside: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   sectionDetail: {
     color: Colors.light.textSecondary,
