@@ -50,9 +50,9 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "web:export": "expo export --platform web",
+    "web:export": "node scripts/check-web-env.mjs && expo export --platform web --clear",
     "web:serve": "expo serve",
-    "web:deploy": "npx eas-cli@22.6.0 deploy --prod",
+    "web:deploy": "node scripts/check-web-env.mjs dist && npx eas-cli@22.6.0 deploy --prod",
     "lint": "expo lint",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.ts"
   },
