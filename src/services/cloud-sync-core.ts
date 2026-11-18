@@ -1,5 +1,7 @@
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 
+import { uniqueChannelName } from '@/data/realtime-utils';
+
 export type CloudMember = {
   userId: string;
   email: string;
@@ -131,11 +133,12 @@ export function createCloudSyncApi(client: SupabaseClient | null) {
 
     subscribeToHouseholdSnapshot(
       householdId: string,
-      listener: (snapshot: CloudSnapshotRow) => void
+      listener: (snapshot: CloudSnapshotRow) => void,
+      onSubscribed?: () => void
     ) {
       if (!client) return () => undefined;
       const channel = client
-        .channel(`household-snapshot:${householdId}`)
+        .channel(uniqueChannelName(`household-snapshot:${householdId}`))
         .on(
           'postgres_changes',
           {
@@ -146,7 +149,9 @@ export function createCloudSyncApi(client: SupabaseClient | null) {
           },
           (event) => listener(parseSnapshot(event.new))
         )
-        .subscribe();
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') onSubscribed?.();
+        });
 
       return () => {
         void client.removeChannel(channel);

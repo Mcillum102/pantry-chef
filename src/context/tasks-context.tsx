@@ -12,6 +12,7 @@ import {
   type ReminderCompletion,
   type SubtaskCheck,
 } from '@/data/reminders';
+import { useAppResume, useForegroundInterval } from '@/hooks/use-app-resume';
 import { usePersistentState } from '@/hooks/use-persistent-state';
 import {
   deleteReminderRow,
@@ -101,8 +102,9 @@ export function TasksProvider({ children }: PropsWithChildren) {
     void load();
   }, [configured, load, nonce]);
 
+  const needsSetup = status === 'needs-setup';
   useEffect(() => {
-    if (!cloud || !householdId || status === 'needs-setup') return;
+    if (!cloud || !householdId || needsSetup) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const unsubscribe = subscribeReminders(householdId, () => {
       // 对方连续改动时合并成一次刷新
@@ -113,7 +115,11 @@ export function TasksProvider({ children }: PropsWithChildren) {
       if (timer) clearTimeout(timer);
       unsubscribe();
     };
-  }, [cloud, householdId, load, status]);
+  }, [cloud, householdId, load, needsSetup]);
+
+  // iPhone 把 App 放到后台时会断开实时连接，回来时重新拉一次；另外每分钟兜底检查一次
+  useAppResume(() => void load(), cloud);
+  useForegroundInterval(() => void load(), 60_000, cloud && !needsSetup);
 
   /** 先改本机（界面立刻响应），再写云端；云端失败就恢复原样并抛出错误 */
   const mutate = useCallback(async (apply: (current: TasksSnapshot) => TasksSnapshot, remote?: () => Promise<void>) => {

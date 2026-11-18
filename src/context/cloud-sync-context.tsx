@@ -12,6 +12,7 @@ import {
 
 import { type HealthSnapshot, useHealth } from '@/context/health-context';
 import { type KitchenSnapshot, useKitchen } from '@/context/kitchen-context';
+import { useAppResume } from '@/hooks/use-app-resume';
 import { usePersistentState } from '@/hooks/use-persistent-state';
 import { isWrongPasscodeError } from '@/data/app-access-utils';
 import { classifyRemoteSnapshot } from '@/data/cloud-sync-utils';
@@ -312,10 +313,25 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
     setPendingSnapshot,
   ]);
 
+  const handleRemoteRowRef = useRef(handleRemoteRow);
+  handleRemoteRowRef.current = handleRemoteRow;
+  const householdId = household?.id ?? null;
+  const hasSession = Boolean(session);
+
+  /** 拉一次云端最新快照，按版本号决定忽略 / 应用 / 提示冲突 */
+  const catchUp = useCallback(() => {
+    if (!enabled || !hasSession || !householdId) return;
+    void pullHouseholdSnapshot(householdId)
+      .then((row) => handleRemoteRowRef.current(row))
+      .catch(() => undefined);
+  }, [enabled, hasSession, householdId]);
+
   useEffect(() => {
-    if (!enabled || !household || !session) return;
-    return subscribeToHouseholdSnapshot(household.id, handleRemoteRow);
-  }, [enabled, handleRemoteRow, household, session]);
+    if (!enabled || !householdId || !hasSession) return;
+    return subscribeToHouseholdSnapshot(householdId, (row) => handleRemoteRowRef.current(row), catchUp);
+  }, [catchUp, enabled, hasSession, householdId]);
+
+  useAppResume(catchUp, enabled && hasSession && Boolean(householdId));
 
   const syncNow = useCallback(async () => {
     if (!enabled || !session || !household) return;

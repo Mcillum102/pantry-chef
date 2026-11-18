@@ -2,6 +2,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 import { MESSAGE_LIMIT, type MemberId, type Nudge, type Reminder, type ReminderCompletion, type Subtask, type SubtaskCheck } from '@/data/reminders';
+import { uniqueChannelName } from '@/data/realtime-utils';
 import { supabase } from '@/services/cloud-sync';
 
 export class RemindersNotInstalledError extends Error {
@@ -170,15 +171,17 @@ export async function markNudgesReadRows(ids: string[]) {
   check(error);
 }
 
-/** 任何一张表有变化就回调（由调用方重新拉取，简单可靠） */
+/** 任何一张表有变化就回调（由调用方重新拉取，简单可靠）；连上 / 重连成功时也回调一次，补上断线期间漏掉的改动 */
 export function subscribeReminders(householdId: string, onChange: () => void) {
   const db = supabase;
   if (!db) return () => undefined;
-  const channel: RealtimeChannel = db.channel(`reminders-${householdId}`);
+  const channel: RealtimeChannel = db.channel(uniqueChannelName(`reminders-${householdId}`));
   ['reminders', 'reminder_completions', 'nudges', 'reminder_subtask_checks'].forEach((table) => {
     channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: `household_id=eq.${householdId}` }, onChange);
   });
-  channel.subscribe();
+  channel.subscribe((status) => {
+    if (status === 'SUBSCRIBED') onChange();
+  });
   return () => {
     void db.removeChannel(channel);
   };
