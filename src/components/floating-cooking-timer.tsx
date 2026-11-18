@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { TAB_BAR_HEIGHT, webTabBarBottom } from '@/constants/tab-bar';
 import { useCookingSession } from '@/context/cooking-session-context';
 import { useLanguage } from '@/context/language-context';
 
@@ -56,7 +57,8 @@ export function FloatingCookingTimer() {
       }}
       style={({ pressed }) => [
         styles.floatingTimer,
-        { bottom: Platform.OS === 'web' ? 92 : Math.max(insets.bottom - 6, 8) + 80 },
+        // 停在 Tab 栏上方 12px
+        { bottom: Platform.OS === 'web' ? webTabBarBottom(insets.bottom) + TAB_BAR_HEIGHT + 12 : Math.max(insets.bottom - 6, 8) + 80 },
         timerDone && styles.floatingTimerDone,
         pressed && styles.floatingTimerPressed,
       ]}>

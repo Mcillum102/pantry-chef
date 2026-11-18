@@ -3,11 +3,10 @@ import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { TAB_BAR_HEIGHT, webTabBarBottom } from '@/constants/tab-bar';
 import { Colors, MaxContentWidth } from '@/constants/theme';
 import { useKeyboardInsets } from '@/hooks/use-keyboard-insets';
 
-/** 底部 Tab 栏的高度（含边框），见 app-tab-bar.tsx 的 innerContainer */
-const TAB_BAR_HEIGHT = 68;
 const GAP = 8;
 /** 输入栏本身大约多高，页面底部要多留这么多空白 */
 export const CHAT_COMPOSER_SPACE = 64;
@@ -31,7 +30,7 @@ export function ChatComposer({
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
 
-  const tabBarBottom = Platform.OS === 'web' ? Math.max(insets.bottom, 8) : Math.max(insets.bottom - 6, 8);
+  const tabBarBottom = Platform.OS === 'web' ? webTabBarBottom(insets.bottom) : Math.max(insets.bottom - 6, 8);
   const keyboardOpen = keyboard.bottom > 0;
   const bottom = keyboardOpen ? keyboard.bottom + GAP : tabBarBottom + TAB_BAR_HEIGHT + GAP;
   const canSend = message.trim().length > 0 && !sending;

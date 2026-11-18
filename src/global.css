@@ -44,9 +44,21 @@ body {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
+/* iOS 26+ 主屏幕 App：height:100% 会少算底部 Home 横条那一条（约 34px），页面最下面空出一块。
+   主屏幕模式下 100vh 包含安全区，用它铺满整块屏幕。（WebKit bug 254868 / 292603） */
+@media all and (display-mode: standalone) {
+  html,
+  body,
+  #root {
+    height: 100vh !important;
+  }
+}
+
+/* 底部 Tab 栏离屏幕底边的距离：压进 Home 横条区域一部分，只留出横条本身的位置。
+   改这里要同步改 src/constants/tab-bar.ts 里的 webTabBarBottom */
 #app-tab-bar-v2 {
   box-sizing: border-box;
-  bottom: max(8px, env(safe-area-inset-bottom, 0px)) !important;
+  bottom: max(8px, calc(env(safe-area-inset-bottom, 0px) - 14px)) !important;
   padding-right: max(14px, env(safe-area-inset-right, 0px));
   padding-left: max(14px, env(safe-area-inset-left, 0px));
 }
