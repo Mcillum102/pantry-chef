@@ -58,7 +58,6 @@ export type CloudSyncStatus =
 type CloudSyncContextValue = {
   configured: boolean;
   enabled: boolean;
-  setEnabled: (enabled: boolean) => void;
   status: CloudSyncStatus;
   session: Session | null;
   household: CloudHousehold | null;
@@ -87,7 +86,8 @@ function isAppCloudSnapshot(value: unknown): value is AppCloudSnapshot {
 export function CloudSyncProvider({ children }: PropsWithChildren) {
   const kitchen = useKitchen();
   const health = useHealth();
-  const [enabled, setEnabled] = usePersistentState('setting-cloud-sync', true);
+  // 以前「偏好设置」里可以暂停同步；那个开关已经删掉，同步始终开启
+  const enabled = true;
   const [pendingSnapshot, setPendingSnapshot] = usePersistentState<AppCloudSnapshot | null>(
     'cloud-pending-snapshot-v1',
     null
@@ -380,11 +380,6 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
   const value = useMemo<CloudSyncContextValue>(() => ({
     configured: isCloudConfigured,
     enabled,
-    setEnabled: (nextEnabled) => {
-      setEnabled(nextEnabled);
-      initializedKeyRef.current = '';
-      setStatus(nextEnabled ? (session ? 'syncing' : 'signed-out') : 'paused');
-    },
     status,
     session,
     household,
@@ -437,7 +432,6 @@ export function CloudSyncProvider({ children }: PropsWithChildren) {
     pendingSnapshot,
     refreshHousehold,
     session,
-    setEnabled,
     setLastSyncedAt,
     setPendingSnapshot,
     status,

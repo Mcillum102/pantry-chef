@@ -1427,28 +1427,6 @@ export default function InventoryScreen() {
           </View>
         ) : null}
 
-        {!hasInventoryFilter ? (
-          <View style={styles.toolRow}>
-            {[
-              { key: 'planner', emoji: '📅', title: text('本周菜单', 'Weekly menu'), detail: text('按库存排 7 天三餐', 'Plan 7 days from stock'), href: '/planner' as const, tint: '#EAF4EE' },
-              { key: 'insights', emoji: '🌱', title: text('节约报告', 'Savings'), detail: text('吃完和丢弃记录', 'Finished vs. wasted'), href: '/insights' as const, tint: '#FFF4E4' },
-            ].map((tool) => (
-              <Pressable
-                key={tool.key}
-                accessibilityRole="button"
-                accessibilityLabel={tool.title}
-                onPress={() => router.push(tool.href)}
-                style={({ pressed }) => [styles.toolCard, { backgroundColor: tool.tint }, pressed && styles.pressed]}>
-                <Text style={styles.toolEmoji}>{tool.emoji}</Text>
-                <View style={styles.toolCopy}>
-                  <Text style={styles.toolTitle}>{tool.title}</Text>
-                  <Text style={styles.toolDetail} numberOfLines={1}>{tool.detail}</Text>
-                </View>
-                <Text style={styles.toolChevron}>›</Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
 
         {!hasInventoryFilter && activeItems.length < 8 && starterItems.length > 0 ? (
           <View style={styles.starterCard}>

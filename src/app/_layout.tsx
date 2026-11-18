@@ -13,8 +13,6 @@ import { KitchenProvider } from '@/context/kitchen-context';
 import { LanguageProvider } from '@/context/language-context';
 import { MemberProvider } from '@/context/member-context';
 import { HealthProvider } from '@/context/health-context';
-import { ReminderProvider } from '@/context/reminder-context';
-import { WidgetProvider } from '@/context/widget-context';
 import { TasksProvider } from '@/context/tasks-context';
 
 void SplashScreen.preventAutoHideAsync();
@@ -27,22 +25,18 @@ export default function RootLayout() {
         <LanguageProvider>
           <KitchenProvider key="inventory-schema-v7">
             <HealthProvider>
-              <ReminderProvider>
                 <MemberProvider>
                 <CloudSyncProvider>
                 <TasksProvider>
                 <CookingSessionProvider>
-                  <WidgetProvider>
                     <ViewportGuard />
                     <CookingNotificationRouter />
                     <AppAccessGate />
                     <AppLaunchAnimation />
-                  </WidgetProvider>
                 </CookingSessionProvider>
                 </TasksProvider>
                 </CloudSyncProvider>
                 </MemberProvider>
-              </ReminderProvider>
             </HealthProvider>
           </KitchenProvider>
         </LanguageProvider>

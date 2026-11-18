@@ -37,7 +37,6 @@ import { useCookingSession } from '@/context/cooking-session-context';
 import { localDateKey, type MealType, useHealth } from '@/context/health-context';
 import { useKitchen } from '@/context/kitchen-context';
 import { useLanguage } from '@/context/language-context';
-import { useReminders } from '@/context/reminder-context';
 import { formatAmount, localizeContent } from '@/data/content-translations';
 import type { ImportedRecipe } from '@/data/ai-import';
 import { type CookingHistoryRecord, type Recipe } from '@/data/kitchen-data';
@@ -177,7 +176,6 @@ export default function RecipesScreen() {
     clearCookingSession,
   } = useCookingSession();
   const { language, text } = useLanguage();
-  const { preferences: reminderPreferences } = useReminders();
   const insets = useSafeAreaInsets();
   const [majorLibrary, setMajorLibrary] = useState<MajorRecipeLibrary>('recipes');
   const [search, setSearch] = useState('');
@@ -886,17 +884,15 @@ export default function RecipesScreen() {
       timerStepIndex: index,
       completedTimerSteps: completedTimerSteps.filter((item) => item !== index),
     });
-    if (reminderPreferences.masterEnabled && reminderPreferences.cookingEnabled) {
-      void scheduleCookingTimerNotification({
-        deadline,
-        recipeName: selectedRecipe.name,
-        recipeNameEn: localizeContent(selectedRecipe.name, 'en'),
-        recipeEmoji: selectedRecipe.emoji,
-        stepNumber: index + 1,
-        stepText: localizeContent(selectedRecipe.steps[index], language),
-        language,
-      });
-    }
+    void scheduleCookingTimerNotification({
+      deadline,
+      recipeName: selectedRecipe.name,
+      recipeNameEn: localizeContent(selectedRecipe.name, 'en'),
+      recipeEmoji: selectedRecipe.emoji,
+      stepNumber: index + 1,
+      stepText: localizeContent(selectedRecipe.steps[index], language),
+      language,
+    });
   }
 
   function stopTimer() {

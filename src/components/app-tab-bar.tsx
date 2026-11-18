@@ -72,11 +72,7 @@ export const PINNED_TAB: AppTabConfig = {
 
 /** 不显示在 Tab 栏、但需要保留路由的页面 */
 const HIDDEN_TABS: readonly { name: string; href: Href }[] = [
-  { name: 'planner', href: '/planner' },
-  { name: 'insights', href: '/insights' },
-  { name: 'widgets', href: '/widgets' },
   { name: 'account', href: '/account' },
-  { name: 'preferences', href: '/preferences' as Href },
 ];
 
 type AppTabsLayoutProps = {
@@ -93,7 +89,9 @@ export function AppTabsLayout({ containerStyle, surfaceStyle, nativeID }: AppTab
   const badges: Record<string, number> = { index: unreadForMe.length };
 
   return (
-    <Tabs>
+    // backBehavior 'none'：切换 Tab 不往浏览器历史里加记录。默认的 'firstRoute' 会让「返回」
+    // （包括 iPhone 从屏幕边缘右滑）总是跳回第一个 Tab「提醒」——比如在菜谱里右滑关详情时整页跳走
+    <Tabs options={{ backBehavior: 'none' }}>
       <TabSlot style={{ height: '100%' }} />
       <TabList asChild>
         <CustomTabList containerStyle={containerStyle} surfaceStyle={surfaceStyle} nativeID={nativeID}>

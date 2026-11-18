@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { type Href, useRouter } from 'expo-router';
-import { Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AppScreen, SectionHeader } from '@/components/app-screen';
 import { PushNotificationsCard } from '@/components/push-notifications-card';
+import { readViewport } from '@/components/viewport-guard';
 import { Colors, Spacing } from '@/constants/theme';
 import { useCloudSync } from '@/context/cloud-sync-context';
 import { useHealth } from '@/context/health-context';
@@ -11,6 +12,17 @@ import { useKitchen } from '@/context/kitchen-context';
 import { useLanguage } from '@/context/language-context';
 import { useMember } from '@/context/member-context';
 import { clearDiagnostics, readDiagnostics, type DiagnosticEntry } from '@/services/diagnostics';
+
+/** 屏幕读数：不同 iPhone 显示不一致时，截图这一行就能看出差在哪 */
+function ScreenInfo() {
+  const [info, setInfo] = useState<string | null>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const v = readViewport();
+    setInfo(`屏幕 ${v.screenWidth}×${v.screenHeight} · 页面 ${v.innerWidth}×${v.innerHeight} → ${v.appHeight} · 底部安全区 ${Math.round(v.safeAreaBottom)} · ${v.standalone ? '主屏幕' : '浏览器'}`);
+  }, []);
+  return info ? <Text style={styles.screenInfo}>{info}</Text> : null;
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -157,62 +169,6 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.section}>
-        <SectionHeader title={text('厨房工具', 'Kitchen tools')} />
-        {[
-          { key: 'planner', emoji: '📅', title: text('本周菜单', 'Weekly menu'), detail: text('按库存生成 7 天三餐，缺的食材一键加入购物清单', 'Plan 7 days from your stock and add missing items to shopping'), href: '/planner' as Href },
-          { key: 'insights', emoji: '🌱', title: text('节约报告', 'Savings report'), detail: text('查看吃完与丢弃记录，减少浪费', 'See what was finished or thrown away'), href: '/insights' as Href },
-        ].map((tool) => (
-          <Pressable
-            key={tool.key}
-            accessibilityRole="button"
-            accessibilityLabel={tool.title}
-            onPress={() => router.push(tool.href)}
-            style={({ pressed }) => [styles.widgetSettingsCard, pressed && styles.pressed]}>
-            <View style={styles.widgetSettingsIcon}><Text style={styles.widgetSettingsEmoji}>{tool.emoji}</Text></View>
-            <View style={styles.widgetSettingsCopy}>
-              <Text style={styles.widgetSettingsTitle}>{tool.title}</Text>
-              <Text style={styles.widgetSettingsText}>{tool.detail}</Text>
-            </View>
-            <Text style={styles.widgetSettingsChevron}>›</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <View style={styles.section}>
-        <SectionHeader title={text('偏好设置', 'Preferences')} />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={text('打开偏好设置', 'Open preferences')}
-          onPress={() => router.push('/preferences' as Href)}
-          style={({ pressed }) => [styles.widgetSettingsCard, pressed && styles.pressed]}>
-          <View style={styles.widgetSettingsIcon}><Text style={styles.widgetSettingsEmoji}>⚙️</Text></View>
-          <View style={styles.widgetSettingsCopy}>
-            <Text style={styles.widgetSettingsTitle}>{text('提醒与同步', 'Reminders & sync')}</Text>
-            <Text style={styles.widgetSettingsText}>{text('集中调整通知时间、保质期建议和多端同步', 'Manage alert times, shelf-life suggestions, and device sync')}</Text>
-          </View>
-          <Text style={styles.widgetSettingsBadge}>{text('设置', 'OPEN')}</Text>
-          <Text style={styles.widgetSettingsChevron}>›</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.section}>
-        <SectionHeader title={text('桌面与锁屏', 'Home & Lock Screen')} />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={text('打开小组件中心', 'Open widget center')}
-          onPress={() => router.push('/widgets')}
-          style={({ pressed }) => [styles.widgetSettingsCard, pressed && styles.pressed]}>
-          <View style={styles.widgetSettingsIcon}><Text style={styles.widgetSettingsEmoji}>📱</Text></View>
-          <View style={styles.widgetSettingsCopy}>
-            <Text style={styles.widgetSettingsTitle}>{text('iOS 小组件', 'iOS widgets')}</Text>
-            <Text style={styles.widgetSettingsText}>{text('预览并选择临期库存和烹饪倒计时', 'Preview expiry and cooking timer widgets')}</Text>
-          </View>
-          <Text style={styles.widgetSettingsBadge}>{text('已准备', 'READY')}</Text>
-          <Text style={styles.widgetSettingsChevron}>›</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.section}>
         <SectionHeader title={text('数据与恢复', 'Data & recovery')} />
         <View style={styles.backupCard}>
           <View style={styles.backupCopy}>
@@ -236,6 +192,7 @@ export default function ProfileScreen() {
       </View>
 
       <Text style={styles.footer}>{text('鲜食记 · 我们俩的厨房', 'Fresh Pantry')}</Text>
+      <ScreenInfo />
 
       <Modal visible={isBackupOpen} transparent animationType="fade" onRequestClose={() => setIsBackupOpen(false)}>
         <View style={styles.cloudModalBackdrop}>
@@ -342,6 +299,7 @@ const styles = StyleSheet.create({
   settingTitle: { color: Colors.light.text, fontSize: 14, fontWeight: '600' },
   settingDetail: { color: Colors.light.textSecondary, fontSize: 12, lineHeight: 16 },
   footer: { color: Colors.light.textSecondary, fontSize: 12, textAlign: 'center', marginTop: 2 },
+  screenInfo: { color: '#A9ADA6', fontSize: 10.5, textAlign: 'center' },
   cloudStatus: { paddingHorizontal: 4, color: Colors.light.primary, fontSize: 12, lineHeight: 16, fontWeight: '500' },
   widgetSettingsCard: { minHeight: 84, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 22, backgroundColor: Colors.light.surface, borderWidth: 1, borderColor: Colors.light.border },
   widgetSettingsIcon: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: Colors.light.primarySoft },

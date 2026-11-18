@@ -44,14 +44,13 @@ body {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
-/* iOS 26+ 主屏幕 App：height:100% 会少算底部 Home 横条那一条（约 34px），页面最下面空出一块。
-   主屏幕模式下 100vh 包含安全区，用它铺满整块屏幕。（WebKit bug 254868 / 292603） */
-@media all and (display-mode: standalone) {
-  html,
-  body,
-  #root {
-    height: 100vh !important;
-  }
+/* 页面高度由 src/components/viewport-guard.tsx 按每台手机自己的屏幕实测后写进 --app-height：
+   iOS 26+ 主屏幕 App 的 height:100% 有时会少算底部 Home 横条那一条，有的机型 / 系统又不会，不能写死。
+   （WebKit bug 254868 / 292603）还没测出来之前用 100%。 */
+html,
+body,
+#root {
+  height: var(--app-height, 100%) !important;
 }
 
 /* 底部 Tab 栏离屏幕底边的距离：压进 Home 横条区域一部分，只留出横条本身的位置。
