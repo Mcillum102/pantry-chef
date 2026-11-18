@@ -108,6 +108,19 @@ export async function disablePush() {
 }
 
 /** App 打开时调用：把这台设备的订阅、当前是谁、时区同步到云端（推送地址偶尔会变） */
+/** 前台时每隔多久报一次「在用」，以及服务器认为「在用」能持续多久（离开 App 后最多这么久收不到推送） */
+export const ACTIVE_HEARTBEAT_MS = 30_000;
+const ACTIVE_WINDOW_MS = 45_000;
+
+/** 告诉服务器这台设备正在用 App（不用推送）/ 已经离开（恢复推送）。失败无所谓，最多晚一会儿 */
+export async function setDeviceActive(active: boolean) {
+  if (!supabase) return;
+  const subscription = await currentSubscription().catch(() => null);
+  if (!subscription) return;
+  const activeUntil = active ? new Date(Date.now() + ACTIVE_WINDOW_MS).toISOString() : null;
+  await supabase.from('push_subscriptions').update({ active_until: activeUntil }).eq('endpoint', subscription.endpoint);
+}
+
 export async function syncPushSubscription(householdId: string, member: PushMember) {
   const subscription = await currentSubscription();
   if (subscription) await saveSubscription(subscription, householdId, member);

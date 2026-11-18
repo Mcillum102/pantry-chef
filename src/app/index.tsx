@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useIsFocused } from '@react-navigation/native';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -39,8 +40,22 @@ export default function RemindersScreen() {
   const insets = useSafeAreaInsets();
   const {
     reminders, completions, nudges, subtaskChecks, status, subtasksReady, schedulesReady, me,
-    saveReminder, deleteReminder, setDone, setSubtaskDone, sendNudge, deleteMessages,
+    saveReminder, deleteReminder, setDone, setSubtaskDone, sendNudge, deleteMessages, unreadForMe, markRead,
   } = useTasks();
+  const isFocused = useIsFocused();
+  const markedRef = useRef(new Set<string>());
+
+  // 停在「提醒」页、App 在前台时，对方发来的消息算已读（对方那边显示「已读」，Tab 上的红点消失）
+  useEffect(() => {
+    if (!isFocused || typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+    const ids = unreadForMe.map((n) => n.id).filter((id) => !markedRef.current.has(id));
+    if (ids.length === 0) return;
+    const timer = setTimeout(() => {
+      ids.forEach((id) => markedRef.current.add(id)); // 每条只标一次，失败也不反复重试
+      void markRead(ids);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [isFocused, markRead, unreadForMe]);
   const today = toDateKey(new Date());
   const [selected, setSelected] = useState(today);
   const [filter, setFilter] = useState<Filter>('all');

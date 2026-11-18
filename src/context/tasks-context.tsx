@@ -89,12 +89,19 @@ export function TasksProvider({ children }: PropsWithChildren) {
   const cloud = configured && Boolean(householdId);
   const cacheRef = useRef(cache);
   cacheRef.current = cache;
+  // 上一次从云端拉到的数据。实时通知、回到前台、每分钟兜底都会重新拉，大多数时候数据没变，
+  // 没变就不更新——否则每次都整页重绘，两个人来回发几条消息手机就卡住
+  const lastFetchedRef = useRef('');
 
   const load = useCallback(async () => {
     if (!cloud || !householdId) return;
     try {
       const { subtasksReady: ready, schedulesReady: schedulesOk, ...data } = await fetchRemindersData(householdId, addDays(toDateKey(new Date()), -45));
-      setCache(data);
+      const signature = JSON.stringify(data);
+      if (signature !== lastFetchedRef.current) {
+        lastFetchedRef.current = signature;
+        setCache(data);
+      }
       setSubtasksReady(ready);
       setSchedulesReady(schedulesOk);
       setStatus('ready');
@@ -118,7 +125,7 @@ export function TasksProvider({ children }: PropsWithChildren) {
     const unsubscribe = subscribeReminders(householdId, () => {
       // 对方连续改动时合并成一次刷新
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => void load(), 250);
+      timer = setTimeout(() => void load(), 600);
     });
     return () => {
       if (timer) clearTimeout(timer);

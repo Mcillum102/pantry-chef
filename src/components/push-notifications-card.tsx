@@ -5,11 +5,13 @@ import { Colors, Shadows } from '@/constants/theme';
 import { useCloudSync } from '@/context/cloud-sync-context';
 import { useMember } from '@/context/member-context';
 import {
+  ACTIVE_HEARTBEAT_MS,
   currentSubscription,
   disablePush,
   enablePush,
   getPushSupport,
   sendTestPush,
+  setDeviceActive,
   syncPushSubscription,
   type PushSupport,
 } from '@/services/push';
@@ -126,6 +128,31 @@ export function PushSync() {
     if (Platform.OS !== 'web' || !configured || !householdId || !memberId) return;
     void syncPushSubscription(householdId, memberId).catch(() => undefined);
   }, [configured, householdId, memberId]);
+
+  // App 在前台时不需要推送：每 30 秒告诉服务器「这台设备在用」；切到后台 / 关掉时告诉它恢复推送
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !configured || !householdId || typeof document === 'undefined') return;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const report = (active: boolean) => void setDeviceActive(active).catch(() => undefined);
+    const start = () => {
+      report(true);
+      if (!timer) timer = setInterval(() => report(true), ACTIVE_HEARTBEAT_MS);
+    };
+    const stop = () => {
+      if (timer) clearInterval(timer);
+      timer = null;
+      report(false);
+    };
+    const onVisibility = () => (document.visibilityState === 'visible' ? start() : stop());
+    if (document.visibilityState === 'visible') start();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', stop);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', stop);
+      if (timer) clearInterval(timer);
+    };
+  }, [configured, householdId]);
 
   return null;
 }

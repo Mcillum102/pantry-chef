@@ -84,10 +84,6 @@ type AppTabsLayoutProps = {
 };
 
 export function AppTabsLayout({ containerStyle, surfaceStyle, nativeID }: AppTabsLayoutProps) {
-  // 「提醒」上的红点：别人发给我、还没看的消息数
-  const { unreadForMe } = useTasks();
-  const badges: Record<string, number> = { index: unreadForMe.length };
-
   return (
     // backBehavior 'none'：切换 Tab 不往浏览器历史里加记录。默认的 'firstRoute' 会让「返回」
     // （包括 iPhone 从屏幕边缘右滑）总是跳回第一个 Tab「提醒」——比如在菜谱里右滑关详情时整页跳走
@@ -97,7 +93,7 @@ export function AppTabsLayout({ containerStyle, surfaceStyle, nativeID }: AppTab
         <CustomTabList containerStyle={containerStyle} surfaceStyle={surfaceStyle} nativeID={nativeID}>
           {SCROLLABLE_TABS.map((tab) => (
             <TabTrigger key={tab.name} name={tab.name} href={tab.href} asChild>
-              <TabButton label={tab.label} icon={tab.icon} selectedIcon={tab.selectedIcon} badge={badges[tab.name]} />
+              <TabButton label={tab.label} icon={tab.icon} selectedIcon={tab.selectedIcon} showUnread={tab.name === 'index'} />
             </TabTrigger>
           ))}
           <TabTrigger name={PINNED_TAB.name} href={PINNED_TAB.href} asChild>
@@ -228,14 +224,30 @@ type TabButtonProps = TabTriggerSlotProps & {
   label: string;
   icon: IconName;
   selectedIcon: IconName;
-  badge?: number;
+  /** 显示「别人发给我、还没看的消息」红点（只有「提醒」用） */
+  showUnread?: boolean;
 };
+
+/**
+ * 「提醒」上的红点。单独做成组件、自己读提醒数据：
+ * 以前由整个 Tab 布局读，提醒数据一变就连带重绘所有打开过的页面（库存、菜谱都很大），手机会卡。
+ */
+function UnreadBadge() {
+  const { unreadForMe } = useTasks();
+  const count = unreadForMe.length;
+  if (!count) return null;
+  return (
+    <View style={styles.badge} accessibilityLabel={`${count} 条新消息`}>
+      <Text style={styles.badgeText}>{count > 9 ? '9+' : count}</Text>
+    </View>
+  );
+}
 
 export function TabButton({
   label,
   icon,
   selectedIcon,
-  badge,
+  showUnread,
   isFocused,
   onPressIn,
   onPressOut,
@@ -284,7 +296,7 @@ export function TabButton({
     <Pressable
       {...props}
       accessibilityRole="tab"
-      accessibilityLabel={badge ? `${label}，${badge} 条新消息` : label}
+      accessibilityLabel={label}
       accessibilityState={{ selected: Boolean(isFocused) }}
       onLayout={(event) => {
         frameRef.current = event.nativeEvent.layout;
@@ -313,11 +325,7 @@ export function TabButton({
             size={22}
             color={isFocused ? '#FFFFFF' : INACTIVE}
           />
-          {badge ? (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
-            </View>
-          ) : null}
+          {showUnread ? <UnreadBadge /> : null}
         </Animated.View>
         <Animated.Text style={[styles.tabLabel, labelAnimatedStyle, isFocused && styles.selectedLabel]}>
           {label}

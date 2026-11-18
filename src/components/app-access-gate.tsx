@@ -4,7 +4,6 @@ import AppTabs from '@/components/app-tabs';
 import { CloudSyncStatusPill } from '@/components/cloud-sync-status-pill';
 import { KitchenPasscode } from '@/components/kitchen-passcode';
 import { MemberPicker } from '@/components/member-picker';
-import { NudgeBanner } from '@/components/nudge-banner';
 import { PushSync } from '@/components/push-notifications-card';
 import { Colors } from '@/constants/theme';
 import { useCloudSync } from '@/context/cloud-sync-context';
@@ -65,7 +64,6 @@ export function AppAccessGate() {
     <View style={styles.appRoot}>
       <AppTabs />
       <CloudSyncStatusPill />
-      <NudgeBanner />
       <PushSync />
     </View>
   );

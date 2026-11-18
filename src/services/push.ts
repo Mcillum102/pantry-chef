@@ -19,6 +19,10 @@ export async function enablePush(_householdId: string, _member: PushMember): Pro
 
 export async function disablePush() {}
 
+export const ACTIVE_HEARTBEAT_MS = 30_000;
+
+export async function setDeviceActive(_active: boolean) {}
+
 export async function syncPushSubscription(_householdId: string, _member: PushMember) {
   return false;
 }

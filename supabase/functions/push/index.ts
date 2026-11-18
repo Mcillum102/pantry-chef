@@ -55,12 +55,19 @@ async function vapidKeys(): Promise<VapidKeys> {
 
 type SubscriptionRow = {
   id: string; household_id: string; member: MemberId; endpoint: string; p256dh: string; auth: string; timezone: string;
+  /** App 正在前台使用到这个时间（期间不推送）；列不存在（migration 没执行）时是 undefined */
+  active_until?: string | null;
 };
+
+/** 这台设备现在正开着 App：不用推送，免得人在 App 里还弹通知 */
+function isActive(subscription: SubscriptionRow, now = Date.now()) {
+  return Boolean(subscription.active_until && Date.parse(subscription.active_until) > now);
+}
 
 async function subscriptionsFor(householdId: string, member: MemberId) {
   const { data, error } = await admin
     .from('push_subscriptions')
-    .select('id,household_id,member,endpoint,p256dh,auth,timezone')
+    .select('*')
     .eq('household_id', householdId)
     .eq('member', member);
   if (error) throw error;
@@ -68,9 +75,10 @@ async function subscriptionsFor(householdId: string, member: MemberId) {
 }
 
 /** 推给一组设备；失效的订阅（404 / 410）直接删掉 */
-async function deliver(subscriptions: SubscriptionRow[], message: PushMessage) {
+async function deliver(subscriptions: SubscriptionRow[], message: PushMessage, options: { includeActive?: boolean } = {}) {
   const keys = await vapidKeys();
-  const results = await Promise.all(subscriptions.map(async (subscription) => {
+  const targets = options.includeActive ? subscriptions : subscriptions.filter((s) => !isActive(s));
+  const results = await Promise.all(targets.map(async (subscription) => {
     try {
       const result = await sendWebPush(subscription, message, keys, SUBJECT);
       if (result.status === 404 || result.status === 410) {
@@ -86,7 +94,7 @@ async function deliver(subscriptions: SubscriptionRow[], message: PushMessage) {
       return 0;
     }
   }));
-  return { sent: results.filter((status) => status >= 200 && status < 300).length, total: results.length };
+  return { sent: results.filter((status) => status >= 200 && status < 300).length, total: results.length, skippedActive: subscriptions.length - targets.length };
 }
 
 async function handleNudge(nudgeId: string) {
@@ -108,7 +116,7 @@ async function handleNudge(nudgeId: string) {
 async function handleTick() {
   const { data: subscriptions, error } = await admin
     .from('push_subscriptions')
-    .select('id,household_id,member,endpoint,p256dh,auth,timezone');
+    .select('*');
   if (error) throw error;
   const subs = (subscriptions ?? []) as SubscriptionRow[];
   if (subs.length === 0) return { sent: 0 };
@@ -181,7 +189,7 @@ async function handleTest(req: Request, member: MemberId) {
     body: `${MEMBER_NAMES[member]}，以后收到消息和到点的提醒都会这样通知你。`,
     url: '/',
     tag: 'push-test',
-  });
+  }, { includeActive: true });
   return json(result);
 }
 
